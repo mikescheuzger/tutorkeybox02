@@ -237,6 +237,11 @@ bool SampleContainerReader::loadContainerFile(const juce::File& file,
 
     // ── Check if file is an SFZ Descriptor File (.sfz) ────────────────────────
     if (file.getFileExtension().equalsIgnoreCase(".sfz")) {
+        juce::File binCandidate = file.getParentDirectory().getChildFile(file.getFileNameWithoutExtension() + ".bin");
+        if (binCandidate.existsAsFile()) {
+            juce::Logger::writeToLog("SampleContainerReader: Redirected .sfz request to container -> " + binCandidate.getFileName());
+            return loadContainerFile(binCandidate, synthTarget, targetLayerIndex);
+        }
         return SfzReader::loadSfzFile(file, synthTarget, targetLayerIndex);
     }
 

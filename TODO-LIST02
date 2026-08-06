@@ -250,6 +250,7 @@
 - [x] Added `clearAllLayers()` calls in `DeployServer.cpp` and `HeadlessMain.cpp` to guarantee 4 clean empty cards on boot and preset deployment
 - [x] Implemented Automatic Preset Container Normalization in `InstrumentEditorWindow.cpp` and `LayerCardComponent.cpp` on Mac
 - [x] Simplified `DeployClient.cpp` to pure binary transport, eliminating network thread script parsing
+- [x] Added automatic `.bin` candidate redirection in `SampleContainerReader.cpp` on Pi 5 for legacy `.sfz` preset references
 
 ---
 
