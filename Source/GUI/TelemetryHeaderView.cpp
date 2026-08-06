@@ -1,7 +1,7 @@
 #include "TelemetryHeaderView.h"
 
-TelemetryHeaderView::TelemetryHeaderView(AudioEngine &engineToMonitor)
-    : audioEngine(engineToMonitor) {
+TelemetryHeaderView::TelemetryHeaderView(AudioEngine &engineToMonitor, std::function<bool()> piConnectedChecker)
+    : audioEngine(engineToMonitor), isPiConnectedChecker(piConnectedChecker) {
 
   addAndMakeVisible(macTitleLabel);
   macTitleLabel.setFont(juce::FontOptions(10.0f, juce::Font::bold));
@@ -44,7 +44,8 @@ void TelemetryHeaderView::timerCallback() {
                         juce::dontSendNotification);
 
   // 2. Format Pi remote telemetry
-  if (isPiConnected) {
+  bool connected = isPiConnected || (isPiConnectedChecker != nullptr && isPiConnectedChecker());
+  if (connected) {
     piStatsLabel.setText("CPU: " + juce::String(piCpuLoad * 100.0f, 1) +
                              "%  |  Voices: " + juce::String(piActiveVoices) +
                              " / 128  |  Status: Synced",

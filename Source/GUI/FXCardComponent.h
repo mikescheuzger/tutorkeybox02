@@ -17,6 +17,7 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void updateFromPreset();
 
 private:
     AudioEngine& audioEngine;

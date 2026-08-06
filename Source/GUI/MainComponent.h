@@ -42,7 +42,7 @@ private:
     MacroEngine        macroEngine{ presetManager, audioEngine.getSynth() };
 
     DeployControlBar   controlBar{ audioEngine, presetManager };
-    TelemetryHeaderView telemetryView{ audioEngine };
+    TelemetryHeaderView telemetryView{ audioEngine, [this] { return controlBar.getIsPiConnected(); } };
 
     // 4 Modular Synth Layer Cards
     std::array<std::unique_ptr<LayerCardComponent>, 4> layerCards;

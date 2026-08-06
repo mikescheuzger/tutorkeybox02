@@ -185,6 +185,11 @@ void DeployControlBar::updateConnectionStatus() {
                              juce::dontSendNotification);
     statusBadgeLabel.setColour(juce::Label::textColourId,
                                juce::Colour(0xff10b981)); // Emerald Green
+
+    // Send UDP registration ping to Pi 5 (Port 7777) so NetworkServer streams telemetry & MIDI back
+    juce::DatagramSocket udpSocket;
+    char pingBuf[5] = { 'T', 'K', 'B', 'P', 0 };
+    udpSocket.write("kbox.local", 7777, pingBuf, 5);
   } else {
     statusBadgeLabel.setText("MAC STANDALONE ENGINE",
                              juce::dontSendNotification);

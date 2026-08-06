@@ -235,6 +235,8 @@
 - [x] Pure ASCII compliance enforced across all code, comments, UI strings, and log output (100% emoji-free)
 - [x] Fixed Linux GTK3 PkgConfig include and library lookup in CMakeLists.txt for Pi 5 build compatibility
 - [x] Added `JUCE_WEB_BROWSER=0` compile definition to `TutorKeyBoxCore` target to eliminate WebKit2GTK Linux build dependency
+- [x] Implemented multi-stage Linux sample container path resolution (`Containers`, `Samples`, `~/.config/tutorkeybox/Containers`) in `DeployServer.cpp` & `HeadlessMain.cpp`
+- [x] Added UDP client registration ping on Port 7777 in `DeployControlBar.cpp` so Pi 5 daemon streams CPU/RAM telemetry & upstream MIDI back to Mac GUI
 
 ---
 

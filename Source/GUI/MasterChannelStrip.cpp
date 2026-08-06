@@ -102,6 +102,21 @@ void MasterChannelStrip::timerCallback() {
     repaint();
 }
 
+void MasterChannelStrip::updateFromPreset() {
+    const auto& mc = presetManager.getMasterChainPreset();
+    compToggle.setToggleState(mc.compEnabled, juce::dontSendNotification);
+    compThresholdSlider.setValue(mc.compThresholdDb, juce::dontSendNotification);
+    compRatioSlider.setValue(mc.compRatio, juce::dontSendNotification);
+
+    limToggle.setToggleState(mc.limEnabled, juce::dontSendNotification);
+    limThresholdSlider.setValue(mc.limThresholdDb, juce::dontSendNotification);
+
+    clipToggle.setToggleState(mc.clipEnabled, juce::dontSendNotification);
+    clipDriveSlider.setValue(mc.clipDriveDb, juce::dontSendNotification);
+
+    masterFader.setValue(mc.masterGain, juce::dontSendNotification);
+}
+
 void MasterChannelStrip::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat().reduced(2.0f);
     g.setColour(juce::Colour(0xff18181b));

@@ -31,6 +31,7 @@ public:
 
     void setPresetName(const juce::String& name);
     void setSampleLoadingStatus(const juce::String& text, bool isReady = false);
+    bool getIsPiConnected() const { return isPiConnected; }
 
 private:
     AudioEngine&   audioEngine;

@@ -127,6 +127,12 @@ void LayerCardComponent::updateFromPreset() {
       juce::File(layer.sampleContainerPath).getFileNameWithoutExtension();
   instrumentBadgeButton.setButtonText(
       name.isNotEmpty() ? name.toUpperCase() : "NO INSTRUMENT LOADED");
+
+  cutoffKnob.setValue(layer.filterCutoffHz, juce::dontSendNotification);
+  resonanceKnob.setValue(layer.filterResonanceQ, juce::dontSendNotification);
+  auxSendKnob.setValue(layer.auxSendGain, juce::dontSendNotification);
+  volumeSlider.setValue(layer.volume, juce::dontSendNotification);
+  muteToggle.setToggleState(layer.muted, juce::dontSendNotification);
 }
 
 void LayerCardComponent::paint(juce::Graphics &g) {

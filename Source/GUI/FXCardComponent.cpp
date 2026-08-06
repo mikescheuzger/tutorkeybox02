@@ -85,6 +85,19 @@ FXCardComponent::FXCardComponent(AudioEngine& engineToControl)
     fxOutputLabel.setFont(juce::FontOptions(10.0f));
 }
 
+void FXCardComponent::updateFromPreset() {
+    delayToggle.setToggleState(audioEngine.getFXChannel().isDelayEnabled(), juce::dontSendNotification);
+    delayTimeSlider.setValue(audioEngine.getFXChannel().getDelayTimeMs(), juce::dontSendNotification);
+    delayFeedbackSlider.setValue(audioEngine.getFXChannel().getDelayFeedback(), juce::dontSendNotification);
+    delayWetSlider.setValue(audioEngine.getFXChannel().getDelayWetLevel(), juce::dontSendNotification);
+
+    reverbToggle.setToggleState(audioEngine.getFXChannel().isReverbEnabled(), juce::dontSendNotification);
+    reverbRoomSlider.setValue(audioEngine.getFXChannel().getReverbRoomSize(), juce::dontSendNotification);
+    reverbDampingSlider.setValue(audioEngine.getFXChannel().getReverbDamping(), juce::dontSendNotification);
+    reverbWetSlider.setValue(audioEngine.getFXChannel().getReverbWetLevel(), juce::dontSendNotification);
+    fxOutputSlider.setValue(audioEngine.getFXChannel().getFxOutputGain(), juce::dontSendNotification);
+}
+
 void FXCardComponent::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat().reduced(2.0f);
     g.setColour(juce::Colour(0xff18181b)); // Dark card background

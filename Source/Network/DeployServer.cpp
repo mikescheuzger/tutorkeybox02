@@ -163,11 +163,21 @@ void DeployServer::handleIncomingClient(juce::StreamingSocket* clientSocket) {
 
                 if (layer.sampleContainerPath.isNotEmpty()) {
                     juce::File binFile(layer.sampleContainerPath);
-                    if (!juce::File::isAbsolutePath(layer.sampleContainerPath)) {
-                        binFile = juce::File::getCurrentWorkingDirectory().getChildFile(layer.sampleContainerPath);
+                    if (!binFile.exists()) {
+                        juce::String fileName = binFile.getFileName();
+                        binFile = juce::File::getCurrentWorkingDirectory().getChildFile(fileName);
+                        if (!binFile.exists()) {
+                            binFile = juce::File::getCurrentWorkingDirectory().getChildFile("Samples").getChildFile(fileName);
+                        }
+                        if (!binFile.exists()) {
+                            binFile = juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".config/tutorkeybox/Containers").getChildFile(fileName);
+                        }
                     }
-                    if (binFile.existsAsFile()) {
+                    if (binFile.exists()) {
                         SampleContainerReader::loadContainerFile(binFile, audioEngine.getSynth(), i);
+                        juce::Logger::writeToLog("DeployServer: Loaded layer " + juce::String(i + 1) + " sample -> " + binFile.getFullPathName());
+                    } else {
+                        juce::Logger::writeToLog("DeployServer Warning: Could not locate sample file on Pi 5 for layer " + juce::String(i + 1) + ": " + layer.sampleContainerPath);
                     }
                 }
             }

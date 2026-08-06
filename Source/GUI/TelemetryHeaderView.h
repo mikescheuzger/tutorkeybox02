@@ -14,7 +14,7 @@
 class TelemetryHeaderView : public juce::Component,
                             private juce::Timer {
 public:
-    explicit TelemetryHeaderView(AudioEngine& engineToMonitor);
+    explicit TelemetryHeaderView(AudioEngine& engineToMonitor, std::function<bool()> piConnectedChecker = nullptr);
     ~TelemetryHeaderView() override;
 
     void paint(juce::Graphics& g) override;
@@ -25,6 +25,7 @@ public:
 
 private:
     AudioEngine& audioEngine;
+    std::function<bool()> isPiConnectedChecker;
 
     float        macCpuLoad{ 0.0f };
     float        piCpuLoad{ 0.0f };

@@ -42,6 +42,18 @@ public:
     // ── Master FX Output Control ──────────────────────────────────────────────
     void setFxOutputGain(float gainLinear) { fxOutputGain = juce::jmax(0.0f, gainLinear); }
 
+    // ── Getters for UI Sync ───────────────────────────────────────────────────
+    bool isDelayEnabled() const { return delayEnabled; }
+    float getDelayTimeMs() const { return targetDelayTimeMs; }
+    float getDelayFeedback() const { return delayFeedback; }
+    float getDelayWetLevel() const { return delayWetLevel; }
+
+    bool isReverbEnabled() const { return reverbEnabled; }
+    float getReverbRoomSize() const { return reverbParams.roomSize; }
+    float getReverbDamping() const { return reverbParams.damping; }
+    float getReverbWetLevel() const { return reverbParams.wetLevel; }
+    float getFxOutputGain() const { return fxOutputGain; }
+
 private:
     double currentSampleRate{ 44100.0 };
 

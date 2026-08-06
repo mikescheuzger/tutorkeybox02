@@ -41,11 +41,19 @@ int main(int argc, char* argv[]) {
 
                 if (layer.sampleContainerPath.isNotEmpty()) {
                     juce::File binFile(layer.sampleContainerPath);
-                    if (!juce::File::isAbsolutePath(layer.sampleContainerPath)) {
-                        binFile = juce::File::getCurrentWorkingDirectory().getChildFile(layer.sampleContainerPath);
+                    if (!binFile.exists()) {
+                        juce::String fileName = binFile.getFileName();
+                        binFile = juce::File::getCurrentWorkingDirectory().getChildFile(fileName);
+                        if (!binFile.exists()) {
+                            binFile = juce::File::getCurrentWorkingDirectory().getChildFile("Samples").getChildFile(fileName);
+                        }
+                        if (!binFile.exists()) {
+                            binFile = juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".config/tutorkeybox/Containers").getChildFile(fileName);
+                        }
                     }
-                    if (binFile.existsAsFile()) {
+                    if (binFile.exists()) {
                         SampleContainerReader::loadContainerFile(binFile, audioEngine.getSynth(), layerIdx);
+                        juce::Logger::writeToLog("HeadlessCore: Loaded layer " + juce::String(layerIdx + 1) + " sample -> " + binFile.getFullPathName());
                     }
                 }
             }
