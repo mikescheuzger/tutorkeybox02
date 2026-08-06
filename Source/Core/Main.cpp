@@ -1,5 +1,6 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "../GUI/MainComponent.h"
+#include <csignal>
 
 // ==============================================================================
 /**
@@ -20,6 +21,9 @@ public:
     }
 
     void initialise(const juce::String& /*commandLine*/) override {
+#if JUCE_MAC || JUCE_LINUX
+        signal(SIGPIPE, SIG_IGN);
+#endif
         mainWindow = std::make_unique<MainWindow>(getApplicationName());
     }
 

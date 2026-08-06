@@ -61,8 +61,7 @@ static int parseNoteToMidi(const juce::String& token, bool& outFoundNote) {
 // =============================================================================
 // Helper 2: Raw Sample Directory Loader with Universal Smart Parser & Category Filter
 // =============================================================================
-static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTarget, int targetLayerIndex) {
-    auto audioFiles = dir.findChildFiles(juce::File::findFiles, true, "*.wav;*.flac");
+static bool loadRawSampleList(const juce::Array<juce::File>& audioFiles, LayeredSynth& synthTarget, int targetLayerIndex, bool isSingleFile = false) {
     if (audioFiles.isEmpty()) return false;
 
     juce::AudioFormatManager formatMgr;
@@ -88,19 +87,26 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
         uint8_t velHigh = 127;
 
         juce::StringArray tokens;
-        tokens.addTokens(name, "_- ", "\"");
+        tokens.addTokens(name, "_- ", "");
 
-        // ── Stage 1, 2, 3: Parse Tokens ──────────────────────────────────────────
-        for (const auto& tok : tokens) {
-            juce::String t = tok.trim();
+        for (auto t : tokens) {
+            t = t.trim();
+            if (t.isEmpty()) continue;
 
-            // 1. Pedal & Release Classifier
-            if (t.containsIgnoreCase("pedal_down") || t.containsIgnoreCase("withpedal") || t.equalsIgnoreCase("pedaldown")) {
-                detectedType = SampleType::PedalDown;
+            if (t.equalsIgnoreCase("nopedal")) {
+                detectedPedalState = PedalState::NoPedal;
+                foundPedalToken = true;
+            }
+            else if (t.equalsIgnoreCase("withpedal") || t.equalsIgnoreCase("pedal")) {
                 detectedPedalState = PedalState::WithPedal;
                 foundPedalToken = true;
             }
-            else if (t.containsIgnoreCase("pedal_up") || t.containsIgnoreCase("nopedal") || t.equalsIgnoreCase("pedalup")) {
+            else if (t.equalsIgnoreCase("pedaldown") || t.equalsIgnoreCase("pedal_down")) {
+                detectedType = SampleType::PedalDown;
+                detectedPedalState = PedalState::NoPedal;
+                foundPedalToken = true;
+            }
+            else if (t.equalsIgnoreCase("pedalup") || t.equalsIgnoreCase("pedal_up")) {
                 detectedType = SampleType::PedalUp;
                 detectedPedalState = PedalState::NoPedal;
                 foundPedalToken = true;
@@ -110,7 +116,6 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
                 foundReleaseToken = true;
             }
 
-            // 2. Velocity Layer Resolver
             if (t.equalsIgnoreCase("pp") || t.equalsIgnoreCase("p") || t.equalsIgnoreCase("soft") || t.equalsIgnoreCase("v1")) {
                 detectedVelLayer = VelocityLayer::P;
                 velLow = 0; velHigh = 42;
@@ -124,7 +129,6 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
                 velLow = 86; velHigh = 127;
             }
 
-            // 3. Pitch & Note Parser
             bool okNote = false;
             int parsedMidi = parseNoteToMidi(t, okNote);
             if (okNote) {
@@ -133,21 +137,18 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
             }
         }
 
-        // ── Stage 4: Strict Category Filter & Exclusion Engine ───────────────────
         if (name.containsIgnoreCase("harm") || name.containsIgnoreCase("resonance") || name.containsIgnoreCase("sympathetic")) {
             juce::Logger::writeToLog("SampleContainerReader: Excluded harmonic sample -> " + f.getFileName());
             ++ignoredCount;
             continue;
         }
 
-        // If file contains NO note token, NO pedal token, and NO release token, IGNORE COMPLETELY!
-        if (!foundNoteToken && !foundPedalToken && !foundReleaseToken) {
+        if (!isSingleFile && !foundNoteToken && !foundPedalToken && !foundReleaseToken) {
             juce::Logger::writeToLog("SampleContainerReader: Ignored non-category file -> " + f.getFileName());
             ++ignoredCount;
             continue;
         }
 
-        // Default note to C4 (60) if pedal noise without note
         if (note == -1) {
             note = 60;
         }
@@ -159,7 +160,6 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
         int numChannels = (int)reader->numChannels;
         double sampleRate = reader->sampleRate;
 
-        // Allocate persistent heap audio buffer
         auto heapBuffer = std::make_shared<juce::AudioBuffer<float>>(numChannels, numSamples);
         reader->read(heapBuffer.get(), 0, numSamples, 0, true, true);
         g_sfzPersistentBuffers.push_back(heapBuffer);
@@ -172,7 +172,7 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
         entry.sampleID = (uint32_t)(loadedCount + 1);
         name.copyToUTF8(entry.name, sizeof(entry.name) - 1);
         entry.rootNote = (uint8_t)note;
-        if (audioFiles.size() == 1) {
+        if (isSingleFile || audioFiles.size() == 1) {
             entry.keyLow = 0;
             entry.keyHigh = 127;
         } else {
@@ -207,8 +207,13 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
         ++loadedCount;
     }
 
-    juce::Logger::writeToLog("SampleContainerReader: Loaded " + juce::String(loadedCount) + " valid samples from " + dir.getFileName() + " (" + juce::String(ignoredCount) + " non-category files ignored).");
+    juce::Logger::writeToLog("SampleContainerReader: Loaded " + juce::String(loadedCount) + " valid samples (" + juce::String(ignoredCount) + " non-category files ignored).");
     return loadedCount > 0;
+}
+
+static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTarget, int targetLayerIndex) {
+    auto audioFiles = dir.findChildFiles(juce::File::findFiles, true, "*.wav;*.flac");
+    return loadRawSampleList(audioFiles, synthTarget, targetLayerIndex, false);
 }
 
 // =============================================================================
@@ -237,7 +242,9 @@ bool SampleContainerReader::loadContainerFile(const juce::File& file,
 
     // ── Check if file is a raw audio sample (.wav / .flac) ─────────────────────
     if (file.getFileExtension().equalsIgnoreCase(".wav") || file.getFileExtension().equalsIgnoreCase(".flac")) {
-        return loadRawSampleDirectory(file.getParentDirectory(), synthTarget, targetLayerIndex);
+        juce::Array<juce::File> singleFile;
+        singleFile.add(file);
+        return loadRawSampleList(singleFile, synthTarget, targetLayerIndex, true);
     }
 
     // ── Zero-copy memory-map the entire .bin container file ───────────────────

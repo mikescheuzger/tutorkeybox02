@@ -1,9 +1,32 @@
 #include "DeployClient.h"
 
+DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
+    DeploymentSnapshot snap;
+    snap.jsonPresetText = preset.toJsonString();
+    for (int i = 0; i < 4; ++i) {
+        const auto& layer = preset.getLayerPreset(i);
+        if (layer.sampleContainerPath.isNotEmpty()) {
+            juce::File f(layer.sampleContainerPath);
+            if (f.existsAsFile()) {
+                snap.containers.push_back({ i, f });
+            }
+        }
+    }
+    return snap;
+}
+
 bool DeployClient::deployToHardware(const PresetManager& preset,
                                     const juce::String&  targetHost,
                                     int                  targetPort,
                                     ProgressCallback     progressCB) {
+    auto snapshot = createSnapshot(preset);
+    return deploySnapshotToHardware(snapshot, targetHost, targetPort, progressCB);
+}
+
+bool DeployClient::deploySnapshotToHardware(const DeploymentSnapshot& snapshot,
+                                            const juce::String&  targetHost,
+                                            int                  targetPort,
+                                            ProgressCallback     progressCB) {
     juce::StreamingSocket socket;
 
     auto updateProgress = [&](float p, const juce::String& msg) {
@@ -31,12 +54,9 @@ bool DeployClient::deployToHardware(const PresetManager& preset,
 
     updateProgress(0.10f, "Checking sample containers on KeyBox...");
 
-    // 3. Scan layers for container files to stream
-    for (int i = 0; i < 4; ++i) {
-        const auto& layer = preset.getLayerPreset(i);
-        if (layer.sampleContainerPath.isEmpty()) continue;
-
-        juce::File binFile(layer.sampleContainerPath);
+    // 3. Scan layers for container files to stream from snapshot
+    for (const auto& item : snapshot.containers) {
+        juce::File binFile = item.localFile;
         if (!binFile.existsAsFile()) continue;
 
         int64_t totalBytes = binFile.getSize();
@@ -73,7 +93,7 @@ bool DeployClient::deployToHardware(const PresetManager& preset,
             chunkHdr.magic[0] = 'T'; chunkHdr.magic[1] = 'K';
             chunkHdr.magic[2] = 'B'; chunkHdr.magic[3] = 'D';
             chunkHdr.opCode = (uint8_t)NetworkProtocol::DeployOpCode::ContainerChunk;
-            chunkHdr.layerIndex = (uint8_t)i;
+            chunkHdr.layerIndex = (uint8_t)item.layerIndex;
             binFileName.copyToUTF8(chunkHdr.containerFileName, sizeof(chunkHdr.containerFileName) - 1);
             chunkHdr.chunkOffset = offset;
             chunkHdr.chunkSize = (uint32_t)numRead;
@@ -95,6 +115,7 @@ bool DeployClient::deployToHardware(const PresetManager& preset,
             }
 
             offset += (uint64_t)numRead;
+
             float progressFraction = 0.10f + (0.75f * ((float)offset / (float)totalBytes));
             updateProgress(progressFraction, "Uploading " + binFileName + " (" +
                            juce::String(offset / (1024 * 1024)) + " / " +
@@ -105,7 +126,7 @@ bool DeployClient::deployToHardware(const PresetManager& preset,
     // 4. Send JSON Preset Payload
     updateProgress(0.90f, "Transmitting preset settings...");
 
-    juce::String jsonText = preset.toJsonString();
+    juce::String jsonText = snapshot.jsonPresetText;
     int32_t jsonSize = (int32_t)jsonText.getNumBytesAsUTF8();
 
     NetworkProtocol::DeployHeader deployHdr{};

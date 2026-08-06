@@ -205,16 +205,24 @@ void DeployControlBar::startDeployment() {
   deployStatusMessage = "Starting deployment...";
   repaint();
 
-  juce::Thread::launch([this] {
-    bool ok = DeployClient::deployToHardware(
-        presetManager, "kbox.local", NetworkProtocol::DEPLOY_PORT,
-        [this](float progress, const juce::String &msg) {
-          juce::MessageManager::callAsync([this, progress, msg] {
-            transferProgress = (double)progress;
-            deployStatusMessage = msg;
-            repaint();
+  // Capture thread-safe snapshot on main UI thread
+  auto snapshot = DeployClient::createSnapshot(presetManager);
+
+  juce::Thread::launch([this, snapshot] {
+    bool ok = false;
+    try {
+      ok = DeployClient::deploySnapshotToHardware(
+          snapshot, "kbox.local", NetworkProtocol::DEPLOY_PORT,
+          [this](float progress, const juce::String &msg) {
+            juce::MessageManager::callAsync([this, progress, msg] {
+              transferProgress = (double)progress;
+              deployStatusMessage = msg;
+              repaint();
+            });
           });
-        });
+    } catch (...) {
+      ok = false;
+    }
 
     juce::MessageManager::callAsync([this, ok] {
       isDeploying = false;

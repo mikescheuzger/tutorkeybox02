@@ -5,8 +5,12 @@
 #include "../Network/DeployServer.h"
 #include "../Network/NetworkServer.h"
 #include <juce_core/juce_core.h>
+#include <csignal>
 
 int main(int argc, char* argv[]) {
+#if JUCE_MAC || JUCE_LINUX
+    signal(SIGPIPE, SIG_IGN);
+#endif
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     juce::Logger::writeToLog("==========================================");

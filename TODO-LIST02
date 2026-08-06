@@ -240,6 +240,10 @@
 - [x] Explicitly initialized `TKBD` magic protocol bytes in `DeployClient.cpp` so Pi 5 `DeployServer` validates and applies incoming JSON preset payloads
 - [x] Fixed full GUI slider & knob synchronization across Layer Cards, Master Strip, FX Card, and Instrument Editor without control jumping on preset load
 - [x] Aligned outer `DeployHeader` and `ContainerChunkHeader` TCP packet sizes to fix streaming of sample container `.bin` files to Pi 5
+- [x] Added `DeployAck` socket read flow control after each 64 KB chunk iteration in `DeployClient.cpp` to prevent TCP buffer overflow during container uploads
+- [x] Added `signal(SIGPIPE, SIG_IGN)` OS signal suppression in `Main.cpp` and `HeadlessMain.cpp` to eliminate BSD socket pipe crash crashes
+- [x] Implemented thread-safe `DeploymentSnapshot` architecture in `DeployClient.h/.cpp` to eliminate UI thread data races
+- [x] Added 88-key note range expansion (`keyLow=0, keyHigh=127`) for direct single WAV sample container loading on Pi 5
 
 ---
 
