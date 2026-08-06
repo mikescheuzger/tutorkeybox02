@@ -1,0 +1,258 @@
+# TutorKeyBox02 — Development TODO List
+
+==============================================================================
+## PHASE 0: PROJECT SETUP & FILE PORTING
+==============================================================================
+
+### Step 0.1: Folder Structure
+- [x] Create Source/ folder tree in TutorKeyBox02 (Core/, Audio/, Synth/, Network/, GUI/, Tools/)
+
+### Step 0.2: Copy Unchanged Files (User Copies — No Edits)
+- [x] Source/Core/MidiState.h
+- [x] Source/Synth/SampleHeader.h          ← WILL BE REPLACED (see Phase 1)
+- [x] Source/Synth/CustomSamplerSound.h    ← WILL BE REPLACED (see Phase 1)
+- [x] Source/Synth/SampleContainerReader.h/.cpp  ← WILL BE REPLACED (see Phase 1)
+- [x] Source/Network/NetworkProtocol.h
+- [x] Source/Network/DeployServer.h/.cpp
+- [x] tutorkeybox.service
+
+### Step 0.3: Copy Files for Modification (User Copies — Coach Edits Later)
+- [x] Source/Synth/LayeredSynth.h/.cpp
+- [x] Source/Synth/CustomSamplerVoice.h/.cpp
+- [x] Source/Core/PresetManager.h/.cpp
+- [x] Source/Core/HeadlessMain.cpp
+- [x] Source/Core/Main.cpp
+- [x] Source/Audio/AudioEngine.h/.cpp
+- [x] Source/Network/NetworkServer.h/.cpp
+- [x] Source/Network/DeployClient.h/.cpp
+
+---
+
+==============================================================================
+## PHASE 1: SAMPLE ENGINE REWORK (New Container Format)
+==============================================================================
+> Priority: Must be done before any audio can be tested.
+
+### Step 1.1: Design New SampleHeader.h
+- [x] Add fields: velocityLayer (P/MF/F), roundRobinIndex, roundRobinCount
+- [x] Add SampleType enum: NoteOn, ReleaseTrigger, PedalDown, PedalUp
+- [x] Add pedalState flag: nopedal / withpedal
+- [x] Add zoneGainMultiplier float (for 9-zone velocity gain shaping per sub-zone)
+- [x] Keep: rootNote, keyLow, keyHigh, velZoneLow, velZoneHigh, sampleRate, numChannels
+- [x] Magic updated TKB1 → TKB2 (clean rejection of old V1 containers)
+
+### Step 1.2: Rework SampleContainerReader.h/.cpp
+- [x] TKB2 magic validation (rejects old V1 containers with clear error message)
+- [x] Routes SampleType::NoteOn → addNoteOnSoundToLayer() (note grid)
+- [x] Routes SampleType::ReleaseTrigger → addReleaseSoundToLayer()
+- [x] Routes SampleType::PedalDown / PedalUp → addPedalSoundToLayer()
+- [x] Bounds check per entry (skips corrupt/overflowing entries with log warning)
+- [x] Detailed log summary on load completion
+- [x] mmap streaming preserved exactly (power-cut safe, zero-copy tail)
+
+### Step 1.3: Rework CustomSamplerSound.h
+- [x] One object = one variant (one RR take × one pedal state × one velocity zone)
+- [x] appliesToNote() excludes non-NoteOn samples (RT, PedalDown, PedalUp handled separately)
+- [x] Added getSampleType(), getVelocityLayer(), getPedalState(), getRoundRobinIndex/Count()
+- [x] appliesToVelocity() uses new velZoneLow/velZoneHigh fields
+- [x] getEntry() exposes zoneGainMultiplier to the voice renderer
+
+### Step 1.4: Rework SamplePackager.h/.cpp
+- [x] Parses new filename convention: [Instrument]_[VEL]_[NOTE][OCT]_rr[N]_[PEDAL].wav
+- [x] Handles P / MF / F velocity layers → 3 SampleEntry records per WAV (one per sub-zone)
+- [x] Handles RT → ReleaseTrigger entries with pitch-down key zones
+- [x] Handles PEDAL_DOWN / PEDAL_UP → pedal noise entries (all-notes range)
+- [x] Map 3 recorded layers → 9 velocity zones (gains: 0.501 / 0.708 / 1.000 = -6/-3/0 dB)
+- [x] Audio written ONCE per WAV file; 3 index entries share same fileOffset (no data duplication)
+- [x] Pitch interpolation: ALWAYS pitch DOWN (root = keyHigh, zone extends downward)
+- [x] Round-robin count computed per group before writing
+- [x] TKB2 magic + version=2 written in ContainerHeader
+- [x] Detailed log summary: NoteOn/RT/Pedal counts + skipped files
+
+### Step 1.5: Rework CustomSamplerVoice.h/.cpp
+- [x] Full ADSR state machine: Attack → Decay → Sustain → Release → Idle
+- [x] Real ms-to-per-sample-increment conversion (attackMs, decayMs, sustainLevel, releaseMs)
+- [x] Zone gain: zoneGainMultiplier × sampleInputGain pre-multiplied into staticGain at startNote
+- [x] Pitch ratio: always pitches DOWN from root (rootNote = keyHigh)
+- [x] Release scales from current adsrLevel (early-release sounds natural, not abrupt)
+- [x] Hard stop path (voice stealing) clears voice immediately without tail
+- [x] Attack buffer (RAM) → tail (mmap) dual-region rendering preserved
+- [x] AdsrParams struct (attackMs, decayMs, sustainLevel, releaseMs) exposed for GUI
+
+### Step 1.6: Rework LayeredSynth.h/.cpp
+- [x] Add per-layer DSP chain: Resonant LP Filter (juce::dsp::StateVariableTPTFilter)
+- [x] Add per-layer AUX Send bus routing to auxOutputBuffer
+- [x] O(1) multi-variant soundLookupGrid supporting round-robin vector per [note][velocity]
+- [x] Real-time CC64 sustain pedal state tracking (NoPedal vs WithPedal sample selection)
+- [x] Triggering of ReleaseTrigger samples on NoteOff
+- [x] Triggering of PedalDown / PedalUp noise samples on CC64 threshold transition
+- [x] Setters for filter cutoff, filter resonance, sample input gain, ADSR params, and AUX send
+
+---
+
+==============================================================================
+## PHASE 2: NEW DSP COMPONENTS
+==============================================================================
+
+### Step 2.1: Create FXChannel.h/.cpp (NEW)
+- [x] Receives summed AUX signals from all 4 layers
+- [x] DSP chain: Stereo Reverb (juce::dsp::Reverb) + Stereo Delay with Feedback (juce::dsp::DelayLine)
+- [x] FX output mixed into master bus with configurable output gain
+- [x] Parameters for reverb (roomSize, damping, wetLevel, dryLevel) and delay (delayTimeMs, feedback, wetLevel)
+
+### Step 2.2: Create MasterChain.h/.cpp (NEW)
+- [x] DSP chain: Compressor (juce::dsp::Compressor) → Limiter (juce::dsp::Limiter) → Clipper (custom std::tanh soft saturation)
+- [x] Sits after all layer + FX mixing
+- [x] Expose parameters: compThreshold, compRatio, compAttack, compRelease, limThreshold, clipThreshold, clipDrive
+- [x] Real-time atomic peak level meter detectors (getPeakLevelL(), getPeakLevelR()) for GUI meters
+
+### Step 2.3: Update AudioEngine.h/.cpp
+- [x] Wire FXChannel after layer mixing
+- [x] Wire MasterChain after FXChannel
+- [x] Pre-allocated auxBuffer in audioDeviceAboutToStart (Zero Heap Allocation)
+- [x] Added postExternalMidiMessage for bidirectional UDP network MIDI handling
+- [x] Exposed getFXChannel() and getMasterChain() accessors
+
+---
+
+==============================================================================
+## PHASE 3: MACRO SYSTEM
+==============================================================================
+
+### Step 3.1: Design MacroSlot Data Model
+- [x] MacroSlot struct: ccNumber, isLearning, isMapped, isReversed
+- [x] MacroTarget struct: targetLayer, targetParam, rangeMin, rangeMax, offset
+- [x] MacroSlot holds vector<MacroTarget> (1 macro → N targets)
+- [x] Add 4x MacroSlot, MasterChainPreset, and expanded LayerPreset to PresetManager
+
+### Step 3.2: Macro Engine Logic
+- [x] CC-Learn: toggle mode, capture next incoming CC number
+- [x] CC-Reverse: invert value (127 - incoming)
+- [x] Range: shrink output range symmetrically around center
+- [x] Bipolar Offset: shift center point of modulation curve
+- [x] Real-time parameter application to LayeredSynth (input gain, output volume, filter cutoff, filter resonance, ADSR, AUX send)
+
+### Step 3.3: Update PresetManager.h/.cpp
+- [x] Add MacroSlot[4] serialization to JSON
+- [x] Add MasterChainPreset (compThreshold, compRatio, compAttack, compRelease, limThreshold, clipThreshold, clipDrive, masterGain)
+- [x] Add LayerPreset fields: filterCutoff, filterResonance, attackMs, decayMs, sustainLevel, releaseMs, sampleInputGain, auxSendGain
+
+---
+
+==============================================================================
+## PHASE 4: NETWORK & MIDI UPDATES
+==============================================================================
+
+### Step 4.1: Bidirectional MIDI (Pi → Mac & Mac → Pi)
+- [x] Add MidiForwardUpstream and MidiForwardDownstream packet types to NetworkProtocol.h
+- [x] Pi NetworkServer: capture MIDI from local controller → send upstream to Mac via UDP
+- [x] Mac AudioEngine: receive UDP MIDI packets from Pi → postExternalMidiMessage() into audio queue
+
+### Step 4.2: Update DeployClient & DeployServer
+- [x] Smart TCP Deployment Protocol headers (HandshakeQuery, HandshakeResponse, ContainerChunk, PresetPayload, DeployAck)
+- [x] DeployClient.cpp: 64 KB chunked streaming of container .bin files with UI progress callback
+- [x] DeployServer.cpp: Power-cut safe .tmp container file streaming, renaming to .bin, applying preset & master chain settings, saving preset.json
+
+---
+
+==============================================================================
+## PHASE 5: GUI REDESIGN (From Scratch)
+==============================================================================
+
+### Step 5.1: Layer Card Component (NEW)
+- [x] Layer title + instrument badge + clear button
+- [x] Resonant Low-Pass Filter section: Cutoff knob + Resonance knob
+- [x] AUX Send knob (routes to 5th FX Card)
+- [x] Layer Output Volume slider + Mute toggle
+- [x] Drag-and-drop zone for .bin container files
+
+### Step 5.2: FX Card (NEW - 5th card)
+- [x] Order: Stereo Delay FIRST (time ms, feedback %, wet level %), Stereo Reverb SECOND (room size %, damping %, wet level %)
+- [x] Master FX Output Gain slider
+
+### Step 5.3: Master Channel Strip (NEW - Logic Pro inspired)
+- [x] Compressor plugin display (threshold, ratio, attack, release)
+- [x] Limiter plugin display (threshold)
+- [x] Soft Saturation Clipper plugin display (drive, threshold)
+- [x] Master Output Volume fader + 30 Hz stereo peak VU meter
+
+### Step 5.4: Macro Panel (NEW - 4 macro slots)
+- [x] 4 labeled macro knobs
+- [x] CC-Learn toggle button (Red LED = unmapped, Green LED = mapped)
+- [x] CC-Reverse checkbox
+- [x] Mapping dropdown (all layer parameters)
+- [x] Range & Bipolar Offset controls
+- [x] "+" button to add additional targets dynamically
+
+### Step 5.5: Header / Control Bar (NEW)
+- [x] Dynamic connection badge (Green = Connected, Cyan = Standalone)
+- [x] Deploy to KeyBox button with container transfer progress bar
+- [x] MIDI Console Log button (opens detached console window)
+- [x] Save & Load Preset JSON buttons
+
+### Step 5.6: MIDI Console Window (NEW)
+- [x] Opens as separate detached window
+- [x] Logs: MIDI note on/off, CC number + value, sample name triggered, root note, key & velocity zones
+- [x] Monospaced scrollable text area with Clear button & Auto-scroll toggle
+
+### Step 5.7: Instrument Editor Window (NEW)
+- [x] Pop-up window when instrument badge is clicked on layer card
+- [x] Dropdown menu of prepared/loaded instrument container files
+- [x] Location badge ("Mac Standalone Engine" vs "KeyBox Hardware Synced")
+- [x] Raw sample input volume gain control
+- [x] Interactive Draggable ADSR Curve Canvas (Attack, Decay, Sustain, Release)
+- [x] Animated Waveform display with real-time playhead position marker
+
+---
+
+==============================================================================
+## PHASE 6: BUILD SYSTEM & TELEMETRY
+==============================================================================
+
+### Step 6.1: Fresh CMakeLists.txt
+- [x] JUCE 8.0.4 via FetchContent (GIT_TAG 8.0.4)
+- [x] Mac GUI target: TutorKeyBox (Desktop GUI App)
+- [x] Pi headless target: TutorKeyBoxCore (Headless Daemon)
+- [x] TKBPackager console tool target (Source/Tools/PackagerMain.cpp)
+- [x] BUILD_GUI=OFF switch for Pi builds
+
+### Step 6.2: Dual Telemetry View
+- [x] TelemetryHeaderView: Side-by-side telemetry readout for local MacBook (CPU %, RAM MB) and Raspberry Pi 5 (CPU %, Active Voices, Sync Status)
+
+### Step 6.3: Multi-Format Sample Support (Option C)
+- [x] Native SFZ File Reader (SfzReader.h/.cpp): Parses .sfz region descriptors directly
+- [x] FLAC & WAV Audio Format Decoding (via JUCE AudioFormatManager)
+- [x] Universal Packager Parsing: Supports Salamander Grand (A0v1..v16.flac), TKB2 conventions, and single-sample pad files
+- [x] Single-Sample Pad Engine: Single audio files automatically expand to full keyboard (0 to 127 keys & velocities) with pitch-up & pitch-down interpolation
+
+### Step 6.4: Zero-Error Compilation & Linker Verification
+- [x] `TutorKeyBox` (macOS Desktop GUI App) built and linked cleanly (`TutorKeyBox 02.app`)
+- [x] `TutorKeyBoxCore` (Raspberry Pi 5 Daemon) built and linked cleanly (`TutorKeyBoxCore`)
+- [x] `TKBPackager` (CLI Sample Packaging Utility) built and linked cleanly (`TKBPackager`)
+
+---
+
+==============================================================================
+## OPEN QUESTIONS (All Answered & Confirmed)
+==============================================================================
+- [x] CONFIRM: Macro mapping full parameter list (volume, cutoff, resonance, ADSR x4, inputGain, auxSend)? -> YES
+- [x] CONFIRM: nopedal/withpedal switching on CC64 — automatic real-time switch? -> YES
+- [x] CONFIRM: RT samples triggered on key release (key lift, not sustain pedal)? -> YES
+- [x] CONFIRM: PEDAL_DOWN/UP samples triggered on CC64 threshold transition? -> YES
+- [x] CONFIRM: Round-robin mode — sequential cycling (rr1→rr2→rr3→rr1)? -> YES
+
+---
+
+==============================================================================
+## COMPLETED MILESTONES (Archived from TutorKeyBox01)
+==============================================================================
+- [x] Zero Heap Allocation Audio Rendering (pre-allocated tempBuffer)
+- [x] O(1) Sound Lookup Grid (soundLookupGrid[128][128])
+- [x] ARM NEON SIMD compile flags (Cortex-A76, -O3)
+- [x] Power-cut safe mmap container streaming
+- [x] RasPi headless preset auto-loader (HeadlessMain.cpp)
+- [x] Systemd service deployed and verified on Pi 5
+- [x] Dual-tier UDP protocol (MIDI <5ms + telemetry 200ms)
+- [x] TCP preset deployment (Deploy to KeyBox button)
+- [x] Background connection status scanner (Mac GUI)
+- [x] Live MIDI hotplug detection

@@ -1,0 +1,86 @@
+# TutorKeyBox02: Product Vision Board & Architectural Blueprint
+
+> **High-Performance Hybrid Piano Synthesizer**  
+> *Mac Studio/Laptop Editor & Remote Controller + Raspberry Pi 5 Ultra-Low Latency Embedded Audio Engine*
+
+---
+
+## 1. Product Vision & Concept
+
+TutorKeyBox is an ultra-low-latency, multi-layer sample-playback synthesizer designed for professional live performance and sound design.
+
+```
++------------------------------------+          UDP Telemetry (200ms)         +------------------------------------+
+|            macOS GUI App           | <------------------------------------> |       Raspberry Pi 5 Daemon        |
+|  - Standalone Local Sound Preview  |                                        |  - Headless ALSA Audio Core        |
+|  - Layer Mute/Gain Editing         | ------ TCP Hardware Preset Deploy ---> |  - 64-sample Buffer (~1.3ms)       |
+|  - Drag & Drop Sample Packaging    |               (Port 7778)              |  - Zero-Heap Allocation SIMD DSP   |
++------------------------------------+                                        +------------------------------------+
+```
+
+### Core Value Propositions
+1. **Zero-Latency Playback:** Raspberry Pi 5 runs headless direct ALSA output with ARM NEON SIMD sample interpolation.
+2. **Offline Mac Sound Design:** Sound design happens on Mac with zero network dependency. Press **Deploy** to push presets to hardware.
+3. **Hard Power-Cut Resilience:** Memory-mapped read-only `.bin` container streaming ensures SD card power cuts never corrupt sample files.
+
+---
+
+## 2. File System Architecture Blueprint (Separation of Concerns)
+
+```text
+TutorKeyBox01/
+ ├── Source/
+ │    ├── Core/                   # Application Lifecycle & Data Models
+ │    │    ├── HeadlessMain.cpp   # Pi Daemon Main Entry Point
+ │    │    ├── Main.cpp           # Mac GUI Desktop Entry Point
+ │    │    ├── MidiState.h        # Polyphonic Note Tracking
+ │    │    └── PresetManager.h/.cpp # JSON Preset Serialization
+ │    │
+ │    ├── Audio/                  # Audio Hardware Device Drivers
+ │    │    ├── AudioEngine.h/.cpp # CoreAudio (Mac) / ALSA (Pi) Device Manager
+ │    │
+ │    ├── Synth/                  # Pure DSP & Synthesiser Core (0% GUI Dependency)
+ │    │    ├── LayeredSynth.h/.cpp# 4-Layer Polyphonic Synthesiser
+ │    │    ├── CustomSamplerVoice # SIMD Sample Interpolation & Voice Allocation
+ │    │    ├── CustomSamplerSound # Mapped Sample Region Descriptors
+ │    │    ├── SampleContainerReader # Read-Only mmap Container Stream
+ │    │    └── SamplePackager.h   # WAV-to-BIN Container Generator
+ │    │
+ │    ├── Network/                # Cross-Platform Communication Protocols
+ │    │    ├── NetworkProtocol.h  # Packed Binary Struct Schemas (UDP/TCP)
+ │    │    ├── DeployClient.h/.cpp# Mac GUI Preset Deployment Client (TCP 7778)
+ │    │    ├── DeployServer.h/.cpp# Pi Daemon Preset Deployment Server (TCP 7778)
+ │    │    └── NetworkServer.h/.cpp# Pi Telemetry & Control Server (UDP 7777)
+ │    │
+ │    └── GUI/                    # Mac Desktop Presentation Layer (Mac Only)
+ │         ├── MainComponent.h/.cpp # Main Window Container
+ │         ├── DeployControlBar   # Status Indicator & Deploy Trigger
+ │         ├── HardwareSelectorBar# Audio & MIDI Input Device Selectors
+ │         ├── LayerCardComponent # Modular Layer Card (Volume, Mute, Drag&Drop)
+ │         └── TelemetryHeaderView# CPU Usage & Active Voice Counter
+```
+
+---
+
+## 3. GUI Redesign Specification ("What Should the UI Do?")
+
+### Phase 1: Header & Control Bar
+- **Dynamic Connection Badge:** Automatically scans for `kbox.local` in background thread and displays `KeyBox Hardware Connected` (Green) or `Standalone Mode (Local Mac Engine)` (Cyan).
+- **One-Click Deployment:** Green **Deploy to KeyBox** button pushes entire active preset to Pi in < 1 second.
+
+### Phase 2: Modular 4-Layer Control Cards
+- **Layer Header:** Layer title, active instrument badge, and clear button.
+- **Dynamic Resonant Filter & ADSR:** Cutoff sweep knob, Resonance control, and Attack/Release sliders per layer.
+- **Drag-and-Drop Dropzone:** Drop any `.wav` folder or raw `.bin` container directly onto a layer card to load instantly.
+
+### Phase 3: Visual Inspection & Inspection Tools
+- **88-Key Zone & Velocity Map:** Mini-keyboard visualizer showing active key zones and velocity range triggers per layer card.
+- **Active Voice & CPU Meter:** Real-time polyphonic voice count meter (0–128 voices) and SIMD CPU usage display.
+
+---
+
+## 4. Next Session Action Plan (4-Hour Sprint)
+
+1. **Sprint Goal 1:** Add per-layer Resonant Low-Pass Filter (`juce::dsp::StateVariableFilter`) to `LayeredSynth`.
+2. **Sprint Goal 2:** Add ADSR Envelope Generator to `CustomSamplerVoice` for dynamic attack/release control.
+3. **Sprint Goal 3:** Implement interactive 88-Key Zone Visualizer component in Mac GUI.

@@ -1,0 +1,63 @@
+# ==============================================================================
+# TutorKeyBox02 — Professional C++ / JUCE / CMake .gitignore
+# ==============================================================================
+
+# 1. CMake & JUCE Build Artifacts & FetchContent Caches
+build/
+bin/
+_deps/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Makefile
+*.cmake
+
+# 2. Target Executables, Bundles, and Libraries
+TutorKeyBox_artefacts/
+TutorKeyBoxCore_artefacts/
+TKBPackager_artefacts/
+*.app/
+*.exe
+*.elf
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.dll
+*.pdb
+
+# 3. IDE & Editor User Settings
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+*.suo
+*.user
+*.userosv
+*.sln
+
+# 4. OS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+
+# 5. Raw Sample Audio Assets & Binary Data Containers
+Samples/
+*.bin
+*.tmp
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.aif
+*.aiff
+
+# 6. Runtime Log Files & User Local Presets
+*.log
+preset.json

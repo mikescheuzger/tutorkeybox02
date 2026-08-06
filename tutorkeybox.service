@@ -1,0 +1,19 @@
+[Unit]
+Description=TutorKeybox Headless Audio Core Daemon
+After=local-fs.target sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=kbox
+WorkingDirectory=/home/kbox/TutorKeyBox01
+ExecStart=/home/kbox/TutorKeyBox01/build/TutorKeyboxCore_artefacts/Release/TutorKeyboxCore
+Restart=always
+RestartSec=3
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=95
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
