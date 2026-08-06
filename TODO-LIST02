@@ -248,7 +248,8 @@
 - [x] Implemented automatic on-the-fly `.bin` container packaging in `DeployClient.cpp` for `.sfz` instruments, eliminating manual terminal packaging
 - [x] Implemented global SFZ `#define` macro substitution (`$VEL`, `$EXT`) in `SfzReader.cpp` to resolve dynamic sample paths during packaging and playback
 - [x] Added `clearAllLayers()` calls in `DeployServer.cpp` and `HeadlessMain.cpp` to guarantee 4 clean empty cards on boot and preset deployment
-- [x] Updated `DeployClient::createSnapshot` to rewrite JSON `sampleContainerPath` to `.bin` container filenames when auto-packaging `.sfz` instruments
+- [x] Implemented Automatic Preset Container Normalization in `InstrumentEditorWindow.cpp` and `LayerCardComponent.cpp` on Mac
+- [x] Simplified `DeployClient.cpp` to pure binary transport, eliminating network thread script parsing
 
 ---
 

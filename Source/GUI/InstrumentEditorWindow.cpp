@@ -1,4 +1,5 @@
 #include "InstrumentEditorWindow.h"
+#include "../Synth/SamplePackager.h"
 
 // =============================================================================
 // AdsrCanvas Implementation — Interactive Draggable ADSR Curve
@@ -282,15 +283,29 @@ void InstrumentEditorWindow::EditorComponent::changeListenerCallback(juce::Chang
 void InstrumentEditorWindow::EditorComponent::loadFileIntoLayer(const juce::File& file) {
     if (!file.existsAsFile()) return;
 
+    juce::File fileToStore = file;
+
+    if (file.getFileExtension().equalsIgnoreCase(".sfz")) {
+        juce::File targetBin = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                .getChildFile("Containers")
+                                .getChildFile(file.getFileNameWithoutExtension() + ".bin");
+        targetBin.getParentDirectory().createDirectory();
+
+        if (SamplePackager::createPackage(file, targetBin)) {
+            fileToStore = targetBin;
+            juce::Logger::writeToLog("InstrumentEditorWindow: Auto-normalized SFZ to container -> " + targetBin.getFullPathName());
+        }
+    }
+
     bool loaded = SampleContainerReader::loadContainerFile(file, audioEngine.getSynth(), layerIndex);
 
     if (loaded) {
         auto layer = presetManager.getLayerPreset(layerIndex);
-        layer.sampleContainerPath = file.getFullPathName();
+        layer.sampleContainerPath = fileToStore.getFullPathName();
         presetManager.setLayerPreset(layerIndex, layer);
-        waveformViewer.setSampleInfo(file.getFileName(), 0.0f);
+        waveformViewer.setSampleInfo(fileToStore.getFileName(), 0.0f);
         updateSyncStatus();
-        juce::Logger::writeToLog("InstrumentEditorWindow: Successfully loaded " + file.getFileName() + " into Layer " + juce::String(layerIndex + 1));
+        juce::Logger::writeToLog("InstrumentEditorWindow: Successfully loaded " + fileToStore.getFileName() + " into Layer " + juce::String(layerIndex + 1));
     }
 }
 

@@ -10,35 +10,11 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
         if (layer.sampleContainerPath.isNotEmpty()) {
             juce::File f(layer.sampleContainerPath);
             if (f.existsAsFile()) {
-                if (f.getFileExtension().equalsIgnoreCase(".sfz")) {
-                    juce::File binCandidate = f.getParentDirectory().getChildFile(f.getFileNameWithoutExtension() + ".bin");
-                    if (binCandidate.existsAsFile()) {
-                        snap.containers.push_back({ i, binCandidate });
-                        if (auto* layersArray = jsonVar["layers"].getArray()) {
-                            if (i < layersArray->size()) {
-                                (*layersArray)[i].getDynamicObject()->setProperty("sampleContainerPath", binCandidate.getFileName());
-                            }
-                        }
-                    } else {
-                        juce::File targetBin = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                                .getChildFile("Containers")
-                                                .getChildFile(f.getFileNameWithoutExtension() + ".bin");
-                        targetBin.getParentDirectory().createDirectory();
-
-                        if (SamplePackager::createPackage(f, targetBin)) {
-                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ instrument to container -> " + targetBin.getFileName());
-                            snap.containers.push_back({ i, targetBin });
-                            if (auto* layersArray = jsonVar["layers"].getArray()) {
-                                if (i < layersArray->size()) {
-                                    (*layersArray)[i].getDynamicObject()->setProperty("sampleContainerPath", targetBin.getFileName());
-                                }
-                            }
-                        } else {
-                            snap.containers.push_back({ i, f });
-                        }
+                snap.containers.push_back({ i, f });
+                if (auto* layersArray = jsonVar["layers"].getArray()) {
+                    if (i < layersArray->size()) {
+                        (*layersArray)[i].getDynamicObject()->setProperty("sampleContainerPath", f.getFileName());
                     }
-                } else {
-                    snap.containers.push_back({ i, f });
                 }
             }
         }

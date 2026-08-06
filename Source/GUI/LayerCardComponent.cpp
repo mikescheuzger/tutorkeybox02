@@ -1,4 +1,5 @@
 #include "LayerCardComponent.h"
+#include "../Synth/SamplePackager.h"
 
 LayerCardComponent::LayerCardComponent(AudioEngine &engineToControl,
                                        PresetManager &presetTarget, int idx)
@@ -206,11 +207,25 @@ void LayerCardComponent::filesDropped(const juce::StringArray &files, int /*x*/,
   for (const auto &path : files) {
     juce::File f(path);
     if (f.exists()) {
+      juce::File fileToStore = f;
+
+      if (f.getFileExtension().equalsIgnoreCase(".sfz")) {
+        juce::File targetBin = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                .getChildFile("Containers")
+                                .getChildFile(f.getFileNameWithoutExtension() + ".bin");
+        targetBin.getParentDirectory().createDirectory();
+
+        if (SamplePackager::createPackage(f, targetBin)) {
+          fileToStore = targetBin;
+          juce::Logger::writeToLog("LayerCardComponent: Auto-normalized SFZ to container -> " + targetBin.getFullPathName());
+        }
+      }
+
       bool ok = SampleContainerReader::loadContainerFile(f, audioEngine.getSynth(),
                                                layerIndex);
       if (ok) {
         auto layer = presetManager.getLayerPreset(layerIndex);
-        layer.sampleContainerPath = f.getFullPathName();
+        layer.sampleContainerPath = fileToStore.getFullPathName();
         presetManager.setLayerPreset(layerIndex, layer);
         updateFromPreset();
         break;
