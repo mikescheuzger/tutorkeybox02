@@ -144,6 +144,9 @@ void DeployServer::handleIncomingClient(juce::StreamingSocket* clientSocket) {
             if (presetManager.loadFromFile(presetFile)) {
                 juce::Logger::writeToLog("DeployServer Success: Updated and saved active preset.json!");
 
+                // Clear all 4 layers before applying new preset payload
+                audioEngine.getSynth().clearAllLayers();
+
                 // Live-update 4 Layer synths
                 for (int i = 0; i < 4; ++i) {
                     const auto& layer = presetManager.getLayerPreset(i);

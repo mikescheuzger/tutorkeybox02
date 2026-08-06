@@ -246,6 +246,9 @@
 - [x] Added 88-key note range expansion (`keyLow=0, keyHigh=127`) for direct single WAV sample container loading on Pi 5
 - [x] Refactored `DeployServer::handleIncomingClient` in `DeployServer.cpp` to maintain a persistent TCP socket loop across all container chunks and preset payload
 - [x] Implemented automatic on-the-fly `.bin` container packaging in `DeployClient.cpp` for `.sfz` instruments, eliminating manual terminal packaging
+- [x] Implemented global SFZ `#define` macro substitution (`$VEL`, `$EXT`) in `SfzReader.cpp` to resolve dynamic sample paths during packaging and playback
+- [x] Added `clearAllLayers()` calls in `DeployServer.cpp` and `HeadlessMain.cpp` to guarantee 4 clean empty cards on boot and preset deployment
+- [x] Updated `DeployClient::createSnapshot` to rewrite JSON `sampleContainerPath` to `.bin` container filenames when auto-packaging `.sfz` instruments
 
 ---
 

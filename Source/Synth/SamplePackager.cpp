@@ -134,6 +134,8 @@ bool SamplePackager::createPackage(const juce::File& inputWavDir, const juce::Fi
         for (const auto& r : sfzRegions) {
             juce::File f = baseDir.getChildFile(r.samplePath);
             if (!f.existsAsFile()) f = baseDir.getChildFile("Samples").getChildFile(r.samplePath);
+            if (!f.existsAsFile()) f = baseDir.getChildFile("Samples").getChildFile(juce::File(r.samplePath).getFileName());
+            if (!f.existsAsFile()) f = baseDir.getChildFile(juce::File(r.samplePath).getFileName());
             if (f.existsAsFile()) audioFiles.add(f);
         }
     } else if (inputWavDir.isDirectory()) {

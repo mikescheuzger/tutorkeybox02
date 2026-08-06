@@ -26,6 +26,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Ensure 4 clean empty cards on boot
+    audioEngine.getSynth().clearAllLayers();
+
     // ── 1. Boot-time Local Preset.json Loading ─────────────────────────────────
     juce::File presetFile = juce::File::getCurrentWorkingDirectory().getChildFile("preset.json");
     if (presetFile.existsAsFile()) {

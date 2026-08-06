@@ -127,6 +127,13 @@ std::vector<SfzRegion> SfzReader::parseSfzRegions(const juce::File& sfzFile) {
     juce::File rootDir = sfzFile.getParentDirectory();
     readSfzFileRecursive(sfzFile, rootDir, lines, defines);
 
+    // Substitute all #define macros ($VEL -> v1, $EXT -> flac, etc.) globally
+    for (auto& line : lines) {
+        for (const auto& kv : defines) {
+            line = line.replace(kv.first, kv.second);
+        }
+    }
+
     SfzRegion currentGroupDefaults;
     SfzRegion currentRegion;
     bool inRegion = false;

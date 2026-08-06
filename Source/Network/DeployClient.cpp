@@ -3,7 +3,8 @@
 
 DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
     DeploymentSnapshot snap;
-    snap.jsonPresetText = preset.toJsonString();
+    juce::var jsonVar = juce::JSON::parse(preset.toJsonString());
+
     for (int i = 0; i < 4; ++i) {
         const auto& layer = preset.getLayerPreset(i);
         if (layer.sampleContainerPath.isNotEmpty()) {
@@ -13,16 +14,25 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
                     juce::File binCandidate = f.getParentDirectory().getChildFile(f.getFileNameWithoutExtension() + ".bin");
                     if (binCandidate.existsAsFile()) {
                         snap.containers.push_back({ i, binCandidate });
+                        if (auto* layersArray = jsonVar["layers"].getArray()) {
+                            if (i < layersArray->size()) {
+                                (*layersArray)[i].getDynamicObject()->setProperty("sampleContainerPath", binCandidate.getFileName());
+                            }
+                        }
                     } else {
-                        juce::File samplesDir = f.getParentDirectory().getChildFile("Samples");
-                        if (!samplesDir.isDirectory()) samplesDir = f.getParentDirectory();
-                        
-                        juce::File targetBin = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Containers").getChildFile(f.getFileNameWithoutExtension() + ".bin");
+                        juce::File targetBin = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                                .getChildFile("Containers")
+                                                .getChildFile(f.getFileNameWithoutExtension() + ".bin");
                         targetBin.getParentDirectory().createDirectory();
 
-                        if (SamplePackager::createPackage(samplesDir, targetBin)) {
-                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ directory to container -> " + targetBin.getFileName());
+                        if (SamplePackager::createPackage(f, targetBin)) {
+                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ instrument to container -> " + targetBin.getFileName());
                             snap.containers.push_back({ i, targetBin });
+                            if (auto* layersArray = jsonVar["layers"].getArray()) {
+                                if (i < layersArray->size()) {
+                                    (*layersArray)[i].getDynamicObject()->setProperty("sampleContainerPath", targetBin.getFileName());
+                                }
+                            }
                         } else {
                             snap.containers.push_back({ i, f });
                         }
@@ -33,6 +43,8 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
             }
         }
     }
+
+    snap.jsonPresetText = juce::JSON::toString(jsonVar);
     return snap;
 }
 
