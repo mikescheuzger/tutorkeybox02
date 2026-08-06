@@ -119,6 +119,13 @@ target_link_libraries(TutorKeyBoxCore PRIVATE
     juce::juce_events
 )
 
+if (UNIX AND NOT APPLE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+    target_include_directories(TutorKeyBoxCore PRIVATE ${GTK3_INCLUDE_DIRS})
+    target_link_libraries(TutorKeyBoxCore PRIVATE ${GTK3_LIBRARIES})
+endif()
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. CLI Sample Packager Tool Target: TKBPackager
 # ──────────────────────────────────────────────────────────────────────────────

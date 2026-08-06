@@ -233,6 +233,7 @@
 - [x] Real-time active preset name badge and loading status readout in DeployControlBar
 - [x] Single-sample pad key range expansion (`keyLow=0, keyHigh=127`) with real-time pitching across 88 keys
 - [x] Pure ASCII compliance enforced across all code, comments, UI strings, and log output (100% emoji-free)
+- [x] Fixed Linux GTK3 PkgConfig include and library lookup in CMakeLists.txt for Pi 5 build compatibility
 
 ---
 
