@@ -237,6 +237,9 @@
 - [x] Added `JUCE_WEB_BROWSER=0` compile definition to `TutorKeyBoxCore` target to eliminate WebKit2GTK Linux build dependency
 - [x] Implemented multi-stage Linux sample container path resolution (`Containers`, `Samples`, `~/.config/tutorkeybox/Containers`) in `DeployServer.cpp` & `HeadlessMain.cpp`
 - [x] Added UDP client registration ping on Port 7777 in `DeployControlBar.cpp` so Pi 5 daemon streams CPU/RAM telemetry & upstream MIDI back to Mac GUI
+- [x] Explicitly initialized `TKBD` magic protocol bytes in `DeployClient.cpp` so Pi 5 `DeployServer` validates and applies incoming JSON preset payloads
+- [x] Fixed full GUI slider & knob synchronization across Layer Cards, Master Strip, FX Card, and Instrument Editor without control jumping on preset load
+- [x] Aligned outer `DeployHeader` and `ContainerChunkHeader` TCP packet sizes to fix streaming of sample container `.bin` files to Pi 5
 
 ---
 

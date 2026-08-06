@@ -57,7 +57,21 @@ bool DeployClient::deployToHardware(const PresetManager& preset,
             int numRead = fileStream.read(chunkBuf.getData(), (int)CHUNK_SIZE);
             if (numRead <= 0) break;
 
+            NetworkProtocol::DeployHeader outerHdr{};
+            outerHdr.magic[0] = 'T'; outerHdr.magic[1] = 'K';
+            outerHdr.magic[2] = 'B'; outerHdr.magic[3] = 'D';
+            outerHdr.opCode = (uint8_t)NetworkProtocol::DeployOpCode::ContainerChunk;
+            outerHdr.payloadSize = (uint32_t)(sizeof(NetworkProtocol::ContainerChunkHeader) + numRead);
+
+            if (socket.write(&outerHdr, sizeof(outerHdr)) != sizeof(outerHdr)) {
+                juce::Logger::writeToLog("DeployClient Error: Failed to write outer deploy header!");
+                updateProgress(0.0f, "Error: Container streaming failed!");
+                return false;
+            }
+
             NetworkProtocol::ContainerChunkHeader chunkHdr{};
+            chunkHdr.magic[0] = 'T'; chunkHdr.magic[1] = 'K';
+            chunkHdr.magic[2] = 'B'; chunkHdr.magic[3] = 'D';
             chunkHdr.opCode = (uint8_t)NetworkProtocol::DeployOpCode::ContainerChunk;
             chunkHdr.layerIndex = (uint8_t)i;
             binFileName.copyToUTF8(chunkHdr.containerFileName, sizeof(chunkHdr.containerFileName) - 1);
@@ -95,6 +109,8 @@ bool DeployClient::deployToHardware(const PresetManager& preset,
     int32_t jsonSize = (int32_t)jsonText.getNumBytesAsUTF8();
 
     NetworkProtocol::DeployHeader deployHdr{};
+    deployHdr.magic[0] = 'T'; deployHdr.magic[1] = 'K';
+    deployHdr.magic[2] = 'B'; deployHdr.magic[3] = 'D';
     deployHdr.opCode = (uint8_t)NetworkProtocol::DeployOpCode::PresetPayload;
     deployHdr.payloadSize = (uint32_t)jsonSize;
 
