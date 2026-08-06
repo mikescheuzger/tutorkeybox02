@@ -56,156 +56,153 @@ void DeployServer::handleIncomingClient(juce::StreamingSocket* clientSocket) {
 
     std::unique_ptr<juce::StreamingSocket> socket(clientSocket);
 
-    NetworkProtocol::DeployHeader header{};
-    if (socket->read(&header, sizeof(NetworkProtocol::DeployHeader), true) <= 0)
-        return;
+    while (socket->isConnected() && isRunning && !threadShouldExit()) {
+        NetworkProtocol::DeployHeader header{};
+        if (socket->read(&header, sizeof(NetworkProtocol::DeployHeader), true) <= 0)
+            break;
 
-    // Verify protocol magic identifier "TKBD"
-    if (header.magic[0] != 'T' || header.magic[1] != 'K' ||
-        header.magic[2] != 'B' || header.magic[3] != 'D') {
-        juce::Logger::writeToLog("DeployServer Warning: Received invalid magic header packet!");
-        return;
-    }
-
-    auto opCode = (NetworkProtocol::DeployOpCode)header.opCode;
-
-    // ── 1. Handshake Query ───────────────────────────────────────────────────
-    if (opCode == NetworkProtocol::DeployOpCode::HandshakeQuery) {
-        NetworkProtocol::DeployHeader respHeader{};
-        respHeader.magic[0] = 'T'; respHeader.magic[1] = 'K';
-        respHeader.magic[2] = 'B'; respHeader.magic[3] = 'D';
-        respHeader.opCode = (uint8_t)NetworkProtocol::DeployOpCode::HandshakeResponse;
-        respHeader.payloadSize = 0;
-
-        socket->write(&respHeader, sizeof(NetworkProtocol::DeployHeader));
-        return;
-    }
-
-    // ── 2. Container File Chunk Streaming (Power-cut safe write to .tmp) ─────
-    if (opCode == NetworkProtocol::DeployOpCode::ContainerChunk) {
-        NetworkProtocol::ContainerChunkHeader chunkHeader{};
-        if (socket->read(&chunkHeader, sizeof(NetworkProtocol::ContainerChunkHeader), true) <= 0)
-            return;
-
-        juce::String targetFileName(chunkHeader.containerFileName);
-        juce::File tmpFile = juce::File::getCurrentWorkingDirectory().getChildFile(targetFileName + ".tmp");
-
-        // First chunk resets file; subsequent chunks append
-        if (chunkHeader.chunkOffset == 0) {
-            tmpFile.deleteFile();
+        // Verify protocol magic identifier "TKBD"
+        if (header.magic[0] != 'T' || header.magic[1] != 'K' ||
+            header.magic[2] != 'B' || header.magic[3] != 'D') {
+            juce::Logger::writeToLog("DeployServer Warning: Received invalid magic header packet!");
+            break;
         }
 
-        juce::FileOutputStream outStream(tmpFile);
-        if (!outStream.openedOk())
-            return;
+        auto opCode = (NetworkProtocol::DeployOpCode)header.opCode;
 
-        outStream.setPosition((juce::int64)chunkHeader.chunkOffset);
+        // ── 1. Handshake Query ───────────────────────────────────────────────────
+        if (opCode == NetworkProtocol::DeployOpCode::HandshakeQuery) {
+            NetworkProtocol::DeployHeader respHeader{};
+            respHeader.magic[0] = 'T'; respHeader.magic[1] = 'K';
+            respHeader.magic[2] = 'B'; respHeader.magic[3] = 'D';
+            respHeader.opCode = (uint8_t)NetworkProtocol::DeployOpCode::HandshakeResponse;
+            respHeader.payloadSize = 0;
 
-        juce::HeapBlock<char> chunkBuffer(chunkHeader.chunkSize);
-        int readNow = socket->read(chunkBuffer.getData(), (int)chunkHeader.chunkSize, true);
-
-        if (readNow > 0) {
-            outStream.write(chunkBuffer.getData(), (size_t)readNow);
-            outStream.flush();
+            socket->write(&respHeader, sizeof(NetworkProtocol::DeployHeader));
+            continue;
         }
 
-        // Final chunk triggers atomic move to .bin file
-        if (chunkHeader.isLastChunk != 0) {
-            juce::File finalBinFile = juce::File::getCurrentWorkingDirectory().getChildFile(targetFileName);
-            finalBinFile.deleteFile();
-            tmpFile.moveFileTo(finalBinFile);
+        // ── 2. Container File Chunk Streaming (Power-cut safe write to .tmp) ─────
+        if (opCode == NetworkProtocol::DeployOpCode::ContainerChunk) {
+            NetworkProtocol::ContainerChunkHeader chunkHeader{};
+            if (socket->read(&chunkHeader, sizeof(NetworkProtocol::ContainerChunkHeader), true) <= 0)
+                break;
 
-            juce::Logger::writeToLog("DeployServer Success: Received complete binary container -> " + finalBinFile.getFileName());
+            juce::String targetFileName(chunkHeader.containerFileName);
+            juce::File tmpFile = juce::File::getCurrentWorkingDirectory().getChildFile(targetFileName + ".tmp");
 
-            // Mount sample container into LayeredSynth
-            SampleContainerReader::loadContainerFile(finalBinFile, audioEngine.getSynth(), chunkHeader.layerIndex);
-        }
-
-        // Send Acknowledge
-        NetworkProtocol::DeployHeader ackHeader{};
-        ackHeader.magic[0] = 'T'; ackHeader.magic[1] = 'K';
-        ackHeader.magic[2] = 'B'; ackHeader.magic[3] = 'D';
-        ackHeader.opCode = (uint8_t)NetworkProtocol::DeployOpCode::DeployAck;
-        socket->write(&ackHeader, sizeof(NetworkProtocol::DeployHeader));
-        return;
-    }
-
-    // ── 3. Live Preset Payload Application & Persistence ────────────────────
-    if (opCode == NetworkProtocol::DeployOpCode::PresetPayload) {
-        uint32_t jsonLen = header.payloadSize;
-        if (jsonLen == 0 || jsonLen > 1024 * 1024)
-            return;
-
-        juce::HeapBlock<char> jsonBuffer(jsonLen + 1);
-        if (socket->read(jsonBuffer.getData(), (int)jsonLen, true) <= 0)
-            return;
-        jsonBuffer[jsonLen] = '\0';
-
-        juce::String jsonString(jsonBuffer.getData());
-
-        juce::File presetFile = juce::File::getCurrentWorkingDirectory().getChildFile("preset.json");
-        presetFile.replaceWithText(jsonString);
-
-        if (presetManager.loadFromFile(presetFile)) {
-            juce::Logger::writeToLog("DeployServer Success: Updated and saved active preset.json!");
-
-            // Live-update 4 Layer synths
-            for (int i = 0; i < 4; ++i) {
-                const auto& layer = presetManager.getLayerPreset(i);
-                audioEngine.getSynth().setLayerVolume(i, layer.volume);
-                audioEngine.getSynth().setLayerMute(i, layer.muted);
-                audioEngine.getSynth().setLayerSampleInputGain(i, layer.sampleInputGain);
-                audioEngine.getSynth().setLayerAuxSend(i, layer.auxSendGain);
-                audioEngine.getSynth().setLayerFilterCutoff(i, layer.filterCutoffHz);
-                audioEngine.getSynth().setLayerFilterResonance(i, layer.filterResonanceQ);
-                audioEngine.getSynth().setLayerAdsr(i, { layer.attackMs, layer.decayMs,
-                                                           layer.sustainLevel, layer.releaseMs });
-
-                if (layer.sampleContainerPath.isNotEmpty()) {
-                    juce::File binFile(layer.sampleContainerPath);
-                    if (!binFile.exists()) {
-                        juce::String fileName = binFile.getFileName();
-                        binFile = juce::File::getCurrentWorkingDirectory().getChildFile(fileName);
-                        if (!binFile.exists()) {
-                            binFile = juce::File::getCurrentWorkingDirectory().getChildFile("Samples").getChildFile(fileName);
-                        }
-                        if (!binFile.exists()) {
-                            binFile = juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".config/tutorkeybox/Containers").getChildFile(fileName);
-                        }
-                    }
-                    if (binFile.exists()) {
-                        SampleContainerReader::loadContainerFile(binFile, audioEngine.getSynth(), i);
-                        juce::Logger::writeToLog("DeployServer: Loaded layer " + juce::String(i + 1) + " sample -> " + binFile.getFullPathName());
-                    } else {
-                        juce::Logger::writeToLog("DeployServer Warning: Could not locate sample file on Pi 5 for layer " + juce::String(i + 1) + ": " + layer.sampleContainerPath);
-                    }
-                }
+            // First chunk resets file; subsequent chunks append
+            if (chunkHeader.chunkOffset == 0) {
+                tmpFile.deleteFile();
             }
 
-            // Live-update MasterChain
-            const auto& mc = presetManager.getMasterChainPreset();
-            auto& masterChain = audioEngine.getMasterChain();
-            masterChain.setCompressorEnabled(mc.compEnabled);
-            masterChain.setCompressorThreshold(mc.compThresholdDb);
-            masterChain.setCompressorRatio(mc.compRatio);
-            masterChain.setCompressorAttack(mc.compAttackMs);
-            masterChain.setCompressorRelease(mc.compReleaseMs);
+            juce::FileOutputStream outStream(tmpFile);
+            if (!outStream.openedOk())
+                break;
 
-            masterChain.setLimiterEnabled(mc.limEnabled);
-            masterChain.setLimiterThreshold(mc.limThresholdDb);
+            outStream.setPosition((juce::int64)chunkHeader.chunkOffset);
 
-            masterChain.setClipperEnabled(mc.clipEnabled);
-            masterChain.setClipperThreshold(mc.clipThresholdDb);
-            masterChain.setClipperDrive(mc.clipDriveDb);
+            juce::HeapBlock<char> chunkBuffer(chunkHeader.chunkSize);
+            int readNow = socket->read(chunkBuffer.getData(), (int)chunkHeader.chunkSize, true);
 
-            masterChain.setMasterGain(mc.masterGain);
+            if (readNow > 0) {
+                outStream.write(chunkBuffer.getData(), (size_t)readNow);
+                outStream.flush();
+            }
+
+            // Final chunk triggers atomic move to .bin file
+            if (chunkHeader.isLastChunk != 0) {
+                juce::File finalBinFile = juce::File::getCurrentWorkingDirectory().getChildFile(targetFileName);
+                finalBinFile.deleteFile();
+                tmpFile.moveFileTo(finalBinFile);
+
+                juce::Logger::writeToLog("DeployServer Success: Received complete binary container -> " + finalBinFile.getFileName());
+
+                // Mount sample container into LayeredSynth
+                SampleContainerReader::loadContainerFile(finalBinFile, audioEngine.getSynth(), chunkHeader.layerIndex);
+            }
+
+            continue;
         }
 
-        // Send Acknowledge
-        NetworkProtocol::DeployHeader ackHeader{};
-        ackHeader.magic[0] = 'T'; ackHeader.magic[1] = 'K';
-        ackHeader.magic[2] = 'B'; ackHeader.magic[3] = 'D';
-        ackHeader.opCode = (uint8_t)NetworkProtocol::DeployOpCode::DeployAck;
-        socket->write(&ackHeader, sizeof(NetworkProtocol::DeployHeader));
+        // ── 3. Live Preset Payload Application & Persistence ────────────────────
+        if (opCode == NetworkProtocol::DeployOpCode::PresetPayload) {
+            uint32_t jsonLen = header.payloadSize;
+            if (jsonLen == 0 || jsonLen > 1024 * 1024)
+                break;
+
+            juce::HeapBlock<char> jsonBuffer(jsonLen + 1);
+            if (socket->read(jsonBuffer.getData(), (int)jsonLen, true) <= 0)
+                break;
+            jsonBuffer[jsonLen] = '\0';
+
+            juce::String jsonString(jsonBuffer.getData());
+
+            juce::File presetFile = juce::File::getCurrentWorkingDirectory().getChildFile("preset.json");
+            presetFile.replaceWithText(jsonString);
+
+            if (presetManager.loadFromFile(presetFile)) {
+                juce::Logger::writeToLog("DeployServer Success: Updated and saved active preset.json!");
+
+                // Live-update 4 Layer synths
+                for (int i = 0; i < 4; ++i) {
+                    const auto& layer = presetManager.getLayerPreset(i);
+                    audioEngine.getSynth().setLayerVolume(i, layer.volume);
+                    audioEngine.getSynth().setLayerMute(i, layer.muted);
+                    audioEngine.getSynth().setLayerSampleInputGain(i, layer.sampleInputGain);
+                    audioEngine.getSynth().setLayerAuxSend(i, layer.auxSendGain);
+                    audioEngine.getSynth().setLayerFilterCutoff(i, layer.filterCutoffHz);
+                    audioEngine.getSynth().setLayerFilterResonance(i, layer.filterResonanceQ);
+                    audioEngine.getSynth().setLayerAdsr(i, { layer.attackMs, layer.decayMs,
+                                                               layer.sustainLevel, layer.releaseMs });
+
+                    if (layer.sampleContainerPath.isNotEmpty()) {
+                        juce::File binFile(layer.sampleContainerPath);
+                        if (!binFile.exists()) {
+                            juce::String fileName = binFile.getFileName();
+                            binFile = juce::File::getCurrentWorkingDirectory().getChildFile(fileName);
+                            if (!binFile.exists()) {
+                                binFile = juce::File::getCurrentWorkingDirectory().getChildFile("Samples").getChildFile(fileName);
+                            }
+                            if (!binFile.exists()) {
+                                binFile = juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".config/tutorkeybox/Containers").getChildFile(fileName);
+                            }
+                        }
+                        if (binFile.exists()) {
+                            SampleContainerReader::loadContainerFile(binFile, audioEngine.getSynth(), i);
+                            juce::Logger::writeToLog("DeployServer: Loaded layer " + juce::String(i + 1) + " sample -> " + binFile.getFullPathName());
+                        } else {
+                            juce::Logger::writeToLog("DeployServer Warning: Could not locate sample file on Pi 5 for layer " + juce::String(i + 1) + ": " + layer.sampleContainerPath);
+                        }
+                    }
+                }
+
+                // Live-update MasterChain
+                const auto& mc = presetManager.getMasterChainPreset();
+                auto& masterChain = audioEngine.getMasterChain();
+                masterChain.setCompressorEnabled(mc.compEnabled);
+                masterChain.setCompressorThreshold(mc.compThresholdDb);
+                masterChain.setCompressorRatio(mc.compRatio);
+                masterChain.setCompressorAttack(mc.compAttackMs);
+                masterChain.setCompressorRelease(mc.compReleaseMs);
+
+                masterChain.setLimiterEnabled(mc.limEnabled);
+                masterChain.setLimiterThreshold(mc.limThresholdDb);
+
+                masterChain.setClipperEnabled(mc.clipEnabled);
+                masterChain.setClipperThreshold(mc.clipThresholdDb);
+                masterChain.setClipperDrive(mc.clipDriveDb);
+
+                masterChain.setMasterGain(mc.masterGain);
+            }
+
+            // Send final Acknowledge
+            NetworkProtocol::DeployHeader ackHeader{};
+            ackHeader.magic[0] = 'T'; ackHeader.magic[1] = 'K';
+            ackHeader.magic[2] = 'B'; ackHeader.magic[3] = 'D';
+            ackHeader.opCode = (uint8_t)NetworkProtocol::DeployOpCode::DeployAck;
+            socket->write(&ackHeader, sizeof(NetworkProtocol::DeployHeader));
+            break;
+        }
     }
 }

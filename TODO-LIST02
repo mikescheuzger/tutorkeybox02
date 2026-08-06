@@ -244,6 +244,7 @@
 - [x] Added `signal(SIGPIPE, SIG_IGN)` OS signal suppression in `Main.cpp` and `HeadlessMain.cpp` to eliminate BSD socket pipe crash crashes
 - [x] Implemented thread-safe `DeploymentSnapshot` architecture in `DeployClient.h/.cpp` to eliminate UI thread data races
 - [x] Added 88-key note range expansion (`keyLow=0, keyHigh=127`) for direct single WAV sample container loading on Pi 5
+- [x] Refactored `DeployServer::handleIncomingClient` in `DeployServer.cpp` to maintain a persistent TCP socket loop across all container chunks and preset payload
 
 ---
 
@@ -254,7 +255,7 @@
 ### Step 6.1: Fresh CMakeLists.txt
 - [x] JUCE 8.0.4 via FetchContent (GIT_TAG 8.0.4)
 - [x] Mac GUI target: TutorKeyBox (Desktop GUI App)
-- [x] Pi headless target: TutorKeyBoxCore (Headless Daemon)
+- [x] Pi headless target: TutorKeyBoxCore (Headless Daemon path: `./build/TutorKeyBoxCore_artefacts/Release/TutorKeyBoxCore`)
 - [x] TKBPackager console tool target (Source/Tools/PackagerMain.cpp)
 - [x] BUILD_GUI=OFF switch for Pi builds
 
