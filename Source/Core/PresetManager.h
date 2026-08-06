@@ -91,10 +91,12 @@ struct MacroSlot {
     std::vector<MacroTarget> targets;            // Multi-target modulation vector
 };
 
+#include <juce_events/juce_events.h>
+
 // =============================================================================
 // PresetManager — Manages Presets, Serialization & File I/O
 // =============================================================================
-class PresetManager {
+class PresetManager : public juce::ChangeBroadcaster {
 public:
     PresetManager();
     ~PresetManager() = default;

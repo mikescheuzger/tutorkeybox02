@@ -25,13 +25,15 @@
 //   │ MacroPanelComponent (4 Slots: CC-Learn, Rev, Target+) │                │
 //   └───────────────────────────────────────────────────────┴────────────────┘
 // =============================================================================
-class MainComponent : public juce::Component {
+class MainComponent : public juce::Component, public juce::ChangeListener {
 public:
     MainComponent();
-    ~MainComponent() override = default;
+    ~MainComponent() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    void updateAllGuiFromPreset();
 
 private:
     MidiState          midiState;

@@ -86,7 +86,7 @@ bool AudioEngine::initialize() {
   juce::String error = deviceManager.setAudioDeviceSetup(setup, true);
   if (error.isNotEmpty()) {
     juce::Logger::writeToLog(
-        "AudioEngine Error: Failed to open hardware audio device — " + error);
+        "AudioEngine Error: Failed to open hardware audio device - " + error);
     deviceManager.initialiseWithDefaultDevices(0, 2);
   }
 
@@ -163,7 +163,7 @@ bool AudioEngine::setBufferSize(int newBufferSize) {
     return true;
   }
   juce::Logger::writeToLog("AudioEngine Error: Failed to set buffer size " +
-                           juce::String(newBufferSize) + " — " + error);
+                           juce::String(newBufferSize) + " - " + error);
   return false;
 }
 

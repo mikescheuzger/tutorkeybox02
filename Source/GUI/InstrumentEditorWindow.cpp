@@ -286,7 +286,7 @@ void InstrumentEditorWindow::EditorComponent::loadFileIntoLayer(const juce::File
 
     if (loaded) {
         auto layer = presetManager.getLayerPreset(layerIndex);
-        layer.sampleContainerPath = file.getFileName();
+        layer.sampleContainerPath = file.getFullPathName();
         presetManager.setLayerPreset(layerIndex, layer);
         waveformViewer.setSampleInfo(file.getFileName(), 0.0f);
         updateSyncStatus();
@@ -310,10 +310,9 @@ void InstrumentEditorWindow::EditorComponent::refreshInstrumentList() {
         }
     }
 
+    instrumentDropDown.setTextWhenNothingSelected("Select Instrument or Browse...");
     if (availableFiles.empty()) {
         instrumentDropDown.addItem("No Instruments Found in ./Samples", 1);
-    } else {
-        instrumentDropDown.setSelectedId(1, juce::dontSendNotification);
     }
 }
 
@@ -380,7 +379,7 @@ void InstrumentEditorWindow::EditorComponent::resized() {
 // InstrumentEditorWindow Implementation
 // =============================================================================
 InstrumentEditorWindow::InstrumentEditorWindow(AudioEngine& engineToControl, PresetManager& presetTarget, int targetLayerIndex)
-    : DocumentWindow("Layer " + juce::String(targetLayerIndex + 1) + " — Instrument Editor",
+    : DocumentWindow("Layer " + juce::String(targetLayerIndex + 1) + " - Instrument Editor",
                      juce::Colour(0xff09090b),
                      DocumentWindow::allButtons),
       audioEngine(engineToControl), presetManager(presetTarget), layerIndex(targetLayerIndex) {

@@ -113,12 +113,6 @@ void CustomSamplerVoice::startNote(int midiNoteNumber, float velocity,
 // =============================================================================
 void CustomSamplerVoice::stopNote(float /*velocity*/, bool allowTailOff) {
     if (allowTailOff && adsrStage != AdsrStage::Idle) {
-        // Enter Release — decrement from current adsrLevel (not necessarily 1.0)
-        // We scale adsrReleaseDec so it reaches 0 over the full releaseMs
-        // regardless of where the envelope is when the key lifts
-        if (adsrLevel > 0.0f)
-            adsrReleaseDec = adsrLevel * adsrReleaseDec;  // scaled to current level
-
         adsrStage = AdsrStage::Release;
     } else {
         // Hard stop — note cut immediately (e.g. voice stealing)

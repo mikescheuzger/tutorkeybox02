@@ -296,6 +296,7 @@ bool PresetManager::loadFromJsonString(const juce::String& jsonText) {
         }
     }
 
+    sendChangeMessage();
     return true;
 }
 

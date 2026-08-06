@@ -38,5 +38,6 @@ You never modify files on your own.
 You never use the terminal or any other console on your own.
 If you generate code, explain the use and the changes in a simple language.
 If a build or compile error occurs at any point: stop immediately, do not attempt to fix it on your own, report exactly what went wrong and what needs to change, and wait for permission before proceeding.
+NEVER put emojis or other non-ASCII compatible text anywhere in the code, comments, or UI strings. EVER. All text in comments, UI labels, and logs MUST be 100% pure ASCII-compatible.
 
 

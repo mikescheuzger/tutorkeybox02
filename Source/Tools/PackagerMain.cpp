@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     std::cout << "=====================================================" << std::endl;
-    std::cout << "  TKBPackager — TutorKeyBox02 Sample Container Tool  " << std::endl;
+    std::cout << "  TKBPackager - TutorKeyBox02 Sample Container Tool  " << std::endl;
     std::cout << "=====================================================" << std::endl;
 
     if (argc < 3) {

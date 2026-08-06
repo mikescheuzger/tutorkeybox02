@@ -183,7 +183,10 @@ void LayerCardComponent::resized() {
 bool LayerCardComponent::isInterestedInFileDrag(
     const juce::StringArray &files) {
   for (const auto &f : files) {
-    if (f.endsWithIgnoreCase(".bin") || juce::File(f).isDirectory())
+    juce::File file(f);
+    if (file.isDirectory() || file.getFileExtension().equalsIgnoreCase(".sfz") ||
+        file.getFileExtension().equalsIgnoreCase(".bin") || file.getFileExtension().equalsIgnoreCase(".wav") ||
+        file.getFileExtension().equalsIgnoreCase(".flac"))
       return true;
   }
   return false;
@@ -196,14 +199,16 @@ void LayerCardComponent::filesDropped(const juce::StringArray &files, int /*x*/,
 
   for (const auto &path : files) {
     juce::File f(path);
-    if (f.existsAsFile() && f.getFileExtension().equalsIgnoreCase(".bin")) {
-      SampleContainerReader::loadContainerFile(f, audioEngine.getSynth(),
+    if (f.exists()) {
+      bool ok = SampleContainerReader::loadContainerFile(f, audioEngine.getSynth(),
                                                layerIndex);
-      auto layer = presetManager.getLayerPreset(layerIndex);
-      layer.sampleContainerPath = path;
-      presetManager.setLayerPreset(layerIndex, layer);
-      updateFromPreset();
-      break;
+      if (ok) {
+        auto layer = presetManager.getLayerPreset(layerIndex);
+        layer.sampleContainerPath = f.getFullPathName();
+        presetManager.setLayerPreset(layerIndex, layer);
+        updateFromPreset();
+        break;
+      }
     }
   }
 }

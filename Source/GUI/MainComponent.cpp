@@ -30,22 +30,28 @@ MainComponent::MainComponent() {
   // 7. Add Master Channel Strip
   addAndMakeVisible(masterStrip);
 
-  // 8. Auto-load default instrument into Layer 1 strictly from ./Samples
-  // directory
-  juce::File samplesDir =
-      juce::File::getCurrentWorkingDirectory().getChildFile("Samples");
-  if (samplesDir.isDirectory()) {
-    auto sampleFiles =
-        samplesDir.findChildFiles(juce::File::findFiles, true, "*.sfz;*.bin");
-    if (!sampleFiles.isEmpty()) {
-      SampleContainerReader::loadContainerFile(sampleFiles[0],
-                                               audioEngine.getSynth(), 0);
-      juce::Logger::writeToLog("MainComponent: Auto-loaded instrument " +
-                               sampleFiles[0].getFileName() + " into Layer 1");
-    }
-  }
+  presetManager.addChangeListener(this);
 
   setSize(1360, 880);
+}
+
+MainComponent::~MainComponent() {
+  presetManager.removeChangeListener(this);
+}
+
+void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
+  if (source == &presetManager) {
+    updateAllGuiFromPreset();
+  }
+}
+
+void MainComponent::updateAllGuiFromPreset() {
+  for (int i = 0; i < 4; ++i) {
+    if (layerCards[i] != nullptr) {
+      layerCards[i]->updateFromPreset();
+    }
+  }
+  repaint();
 }
 
 void MainComponent::paint(juce::Graphics &g) {

@@ -1,0 +1,121 @@
+{
+  "ccMapping": {
+    "faders": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "buttons": [
+      5,
+      6,
+      7
+    ],
+    "knobs": [
+      8,
+      9
+    ],
+    "sustainPedal": 64
+  },
+  "layers": [
+    {
+      "volume": 1.0,
+      "muted": false,
+      "sampleInputGain": 1.0,
+      "auxSendGain": 0.0,
+      "filterCutoffHz": 20000.0,
+      "filterResonanceQ": 0.699999988079071,
+      "attackMs": 10.0,
+      "decayMs": 100.0,
+      "sustainLevel": 1.0,
+      "releaseMs": 300.0,
+      "containerPath": "/Users/mikescheuzger/Desktop/TutorKeyBox02/Samples/SalamanderGrandPiano-master/Salamander Grand Piano V3.sfz"
+    },
+    {
+      "volume": 1.0,
+      "muted": false,
+      "sampleInputGain": 1.0,
+      "auxSendGain": 0.0,
+      "filterCutoffHz": 20000.0,
+      "filterResonanceQ": 0.699999988079071,
+      "attackMs": 10.0,
+      "decayMs": 100.0,
+      "sustainLevel": 1.0,
+      "releaseMs": 300.0,
+      "containerPath": ""
+    },
+    {
+      "volume": 1.0,
+      "muted": false,
+      "sampleInputGain": 1.0,
+      "auxSendGain": 0.0,
+      "filterCutoffHz": 433.0,
+      "filterResonanceQ": 0.699999988079071,
+      "attackMs": 10.0,
+      "decayMs": 100.0,
+      "sustainLevel": 1.0,
+      "releaseMs": 300.0,
+      "containerPath": "/Users/mikescheuzger/Desktop/TutorKeyBox02/Samples/TestPad/DemoPad_C3.wav"
+    },
+    {
+      "volume": 1.0,
+      "muted": false,
+      "sampleInputGain": 1.0,
+      "auxSendGain": 0.0,
+      "filterCutoffHz": 20000.0,
+      "filterResonanceQ": 0.699999988079071,
+      "attackMs": 10.0,
+      "decayMs": 100.0,
+      "sustainLevel": 1.0,
+      "releaseMs": 300.0,
+      "containerPath": ""
+    }
+  ],
+  "masterChain": {
+    "compEnabled": true,
+    "compThresholdDb": -12.0,
+    "compRatio": 3.0,
+    "compAttackMs": 15.0,
+    "compReleaseMs": 100.0,
+    "limEnabled": true,
+    "limThresholdDb": -0.300000011920929,
+    "clipEnabled": true,
+    "clipThresholdDb": -0.100000001490116,
+    "clipDriveDb": 0.0,
+    "masterGain": 1.0
+  },
+  "macros": [
+    {
+      "name": "Macro 1",
+      "ccNumber": -1,
+      "isLearning": false,
+      "isMapped": false,
+      "isReversed": false,
+      "targets": []
+    },
+    {
+      "name": "Macro 2",
+      "ccNumber": -1,
+      "isLearning": false,
+      "isMapped": false,
+      "isReversed": false,
+      "targets": []
+    },
+    {
+      "name": "Macro 3",
+      "ccNumber": -1,
+      "isLearning": false,
+      "isMapped": false,
+      "isReversed": false,
+      "targets": []
+    },
+    {
+      "name": "Macro 4",
+      "ccNumber": -1,
+      "isLearning": false,
+      "isMapped": false,
+      "isReversed": false,
+      "targets": []
+    }
+  ]
+}

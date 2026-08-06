@@ -29,12 +29,18 @@ public:
     void updateConnectionStatus();
     void startDeployment();
 
+    void setPresetName(const juce::String& name);
+    void setSampleLoadingStatus(const juce::String& text, bool isReady = false);
+
 private:
     AudioEngine&   audioEngine;
     PresetManager& presetManager;
     DeployClient   deployClient;
 
     juce::Label      statusBadgeLabel;
+    juce::Label      presetBadgeLabel{ "PresetBadge", "PRESET: [Default Studio Piano]" };
+    juce::Label      sampleLoadingStatusLabel;
+
     juce::TextButton deployButton{ "Deploy to KeyBox" };
     juce::ProgressBar progressBar{ transferProgress };
     double           transferProgress{ 0.0 };

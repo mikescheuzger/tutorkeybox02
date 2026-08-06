@@ -172,8 +172,13 @@ static bool loadRawSampleDirectory(const juce::File& dir, LayeredSynth& synthTar
         entry.sampleID = (uint32_t)(loadedCount + 1);
         name.copyToUTF8(entry.name, sizeof(entry.name) - 1);
         entry.rootNote = (uint8_t)note;
-        entry.keyLow = (uint8_t)juce::jmax(0, note - 2);
-        entry.keyHigh = (uint8_t)juce::jmin(127, note + 2);
+        if (audioFiles.size() == 1) {
+            entry.keyLow = 0;
+            entry.keyHigh = 127;
+        } else {
+            entry.keyLow = (uint8_t)juce::jmax(0, note - 2);
+            entry.keyHigh = (uint8_t)juce::jmin(127, note + 2);
+        }
         entry.velZoneLow = velLow;
         entry.velZoneHigh = velHigh;
         entry.zoneGainMultiplier = 1.0f;
@@ -221,7 +226,7 @@ bool SampleContainerReader::loadContainerFile(const juce::File& file,
     }
 
     if (!file.existsAsFile()) {
-        juce::Logger::writeToLog("SampleContainerReader Error: File does not exist — " + file.getFullPathName());
+        juce::Logger::writeToLog("SampleContainerReader Error: File does not exist - " + file.getFullPathName());
         return false;
     }
 
@@ -239,7 +244,7 @@ bool SampleContainerReader::loadContainerFile(const juce::File& file,
     auto mappedFile = std::make_shared<juce::MemoryMappedFile>(file, juce::MemoryMappedFile::readOnly);
 
     if (mappedFile->getSize() < (int64_t)sizeof(ContainerHeader)) {
-        juce::Logger::writeToLog("SampleContainerReader Error: File empty or mapping failed — " + file.getFullPathName());
+        juce::Logger::writeToLog("SampleContainerReader Error: File empty or mapping failed - " + file.getFullPathName());
         return false;
     }
 
@@ -302,7 +307,7 @@ bool SampleContainerReader::loadContainerFile(const juce::File& file,
     }
 
     juce::Logger::writeToLog("SampleContainerReader: Loaded container '" + file.getFileName() + "' into layer " +
-                             juce::String(targetLayerIndex) + " — " + juce::String(noteOnCount) + " NoteOn, " +
+                             juce::String(targetLayerIndex) + " - " + juce::String(noteOnCount) + " NoteOn, " +
                              juce::String(releaseCount) + " Release, " + juce::String(pedalCount) + " Pedal sounds.");
 
     return true;

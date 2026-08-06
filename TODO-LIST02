@@ -226,6 +226,14 @@
 - [x] Implemented zero-heap 2ms Voice Stealing Crossfade De-Clicker in `CustomSamplerVoice.cpp` to eliminate clicks when spamming notes
 - [x] Implemented Quietest + LRU Voice Stealing Algorithm in `LayeredSynth.cpp` to steal quietest decaying voices first while protecting loud active notes
 
+### Step 7.4: Preset Management & ASCII Code Standard
+- [x] Added `CustomPresets` as default folder for Save and Load preset dialogs
+- [x] Full path storage (`sampleContainerPath = file.getFullPathName()`) recorded on drag-drop and instrument browsing
+- [x] Automatic multi-layer sample loading & DSP parameter transport (Filter Cutoff, Resonance, ADSR, Input Gain, AUX Send, Volume, Mutes, Master Compressor/Limiter) on preset load
+- [x] Real-time active preset name badge and loading status readout in DeployControlBar
+- [x] Single-sample pad key range expansion (`keyLow=0, keyHigh=127`) with real-time pitching across 88 keys
+- [x] Pure ASCII compliance enforced across all code, comments, UI strings, and log output (100% emoji-free)
+
 ---
 
 ==============================================================================
