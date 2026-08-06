@@ -29,7 +29,7 @@ MasterChannelStrip::MasterChannelStrip(AudioEngine& engineToControl, PresetManag
         s.setValue(defV);
 
         addAndMakeVisible(l);
-        l.setFont(9.0f);
+        l.setFont(juce::FontOptions(9.0f));
         l.setJustificationType(juce::Justification::centred);
     };
 
@@ -86,7 +86,7 @@ MasterChannelStrip::MasterChannelStrip(AudioEngine& engineToControl, PresetManag
     };
 
     addAndMakeVisible(masterFaderLabel);
-    masterFaderLabel.setFont(10.0f);
+    masterFaderLabel.setFont(juce::FontOptions(10.0f));
     masterFaderLabel.setJustificationType(juce::Justification::centred);
 
     startTimerHz(30); // 30 Hz VU Meter Refresh

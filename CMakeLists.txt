@@ -42,6 +42,7 @@ set(GUI_SOURCES
     Source/Core/Main.cpp
     Source/GUI/MainComponent.cpp
     Source/GUI/DeployControlBar.cpp
+    Source/GUI/AudioSettingsWindow.cpp
     Source/GUI/LayerCardComponent.cpp
     Source/GUI/FXCardComponent.cpp
     Source/GUI/MasterChannelStrip.cpp
@@ -68,6 +69,7 @@ if (BUILD_GUI)
     target_compile_definitions(TutorKeyBox PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
+        JUCE_USE_FLAC=1
         JUCE_MODAL_LOOPS_PERMITTED=1
         JUCE_STANDALONE_APPLICATION=1
     )
@@ -103,6 +105,7 @@ target_sources(TutorKeyBoxCore PRIVATE
 target_compile_definitions(TutorKeyBoxCore PRIVATE
     JUCE_STANDALONE_APPLICATION=1
     JUCE_USE_CURL=0
+    JUCE_USE_FLAC=1
     HEADLESS_CORE=1
 )
 
@@ -131,6 +134,12 @@ target_sources(TKBPackager PRIVATE
     Source/Synth/CustomSamplerSound.cpp
     Source/Synth/CustomSamplerVoice.cpp
     Source/Synth/LayeredSynth.cpp
+)
+
+target_compile_definitions(TKBPackager PRIVATE
+    JUCE_STANDALONE_APPLICATION=1
+    JUCE_USE_CURL=0
+    JUCE_USE_FLAC=1
 )
 
 target_link_libraries(TKBPackager PRIVATE

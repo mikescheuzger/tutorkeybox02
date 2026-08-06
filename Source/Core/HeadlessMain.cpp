@@ -76,9 +76,9 @@ int main(int argc, char* argv[]) {
     }
 
     // Forward physical Pi MIDI controller events upstream over UDP to Mac GUI app
-    audioEngine.onMidiMessageReceived = [&telemetryServer](const juce::MidiMessage& msg) {
+    audioEngine.addMidiMessageListener([&telemetryServer](const juce::MidiMessage& msg) {
         telemetryServer.broadcastMidiMessage(msg, true); // true = upstream
-    };
+    });
 
     juce::Logger::writeToLog("HeadlessCore Status: KeyBox Daemon is live and active. Press Ctrl+C to quit.");
 

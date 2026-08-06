@@ -205,8 +205,31 @@
 
 ---
 
+==================================================
+## PHASE 7: ACOUSTIC PIANO SAMPLER TUNING & ENGINE OPTIMIZATION
+==================================================
+
+### Step 7.1: FLAC Format Decoding & SFZ Recursive Parser
+- [x] Fixed FLAC audio decoder link by adding `JUCE_USE_FLAC=1` to CMake compile definitions
+- [x] Fixed nested SFZ `#include` file parser to resolve subfiles (`Data/notes.txt`, `Data/region.txt`) relative to root SFZ directory
+- [x] Fixed quote stripping (`cleanTok.unquoted().trim()`) for included SFZ subfiles
+- [x] Fixed ARIA keyswitch parameter parsing (`sw_lokey`, `sw_hikey`) using exact key string matching
+
+### Step 7.2: Real-Time Audio & Telemetry Inspector
+- [x] Added `float velocity` parameter scaling to `staticGain` in `CustomSamplerVoice.cpp` for dynamic velocity response
+- [x] Added live `MidiState` change listener to `InstrumentEditorWindow` waveform viewer to display active sample name (`F#3v2`..`F#3v15`) in real-time
+- [x] Added release damper drop suppression (`!isPedalDown`) when sustain pedal (CC64) is held down
+- [x] Scaled release damper noise gain to natural acoustic level (`0.25x` velocity)
+
+### Step 7.3: Polyphony & Voice Stealing Optimization
+- [x] Bypassed JUCE default backward-search allocator with direct velocity-matched voice assignment via `selectBestVariant()`
+- [x] Implemented zero-heap 2ms Voice Stealing Crossfade De-Clicker in `CustomSamplerVoice.cpp` to eliminate clicks when spamming notes
+- [x] Implemented Quietest + LRU Voice Stealing Algorithm in `LayeredSynth.cpp` to steal quietest decaying voices first while protecting loud active notes
+
+---
+
 ==============================================================================
-## PHASE 6: BUILD SYSTEM & TELEMETRY
+## BUILD SYSTEM & TELEMETRY
 ==============================================================================
 
 ### Step 6.1: Fresh CMakeLists.txt

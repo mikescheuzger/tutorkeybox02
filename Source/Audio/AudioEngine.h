@@ -4,6 +4,7 @@
 #include "../Synth/LayeredSynth.h"
 #include "MasterChain.h"
 #include <functional>
+#include <vector>
 
 // Forward declaration
 struct MidiState;
@@ -28,6 +29,7 @@ struct MidiState;
 // =============================================================================
 class AudioEngine : public juce::AudioIODeviceCallback,
                     public juce::MidiInputCallback,
+                    public juce::ChangeListener,
                     public juce::ChangeBroadcaster {
 public:
   explicit AudioEngine(MidiState &stateToUpdate);
@@ -41,8 +43,8 @@ public:
   bool isAudioOK() const { return audioDeviceOK; }
   juce::String getActiveAudioDeviceName() const;
 
-  // Callback invoked when local or UDP MIDI arrives
-  std::function<void(const juce::MidiMessage &)> onMidiMessageReceived;
+  // Multi-listener registration for MIDI callbacks (MacroEngine, Console, UI)
+  void addMidiMessageListener(std::function<void(const juce::MidiMessage &)> listener);
 
   juce::AudioDeviceManager &getDeviceManager() { return deviceManager; }
   LayeredSynth &getSynth() { return synth; }
@@ -56,6 +58,9 @@ public:
   /** Post external MIDI message (e.g. forwarded from network UDP) into audio
    * queue. */
   void postExternalMidiMessage(const juce::MidiMessage &message);
+
+  // ── juce::ChangeListener ──────────────────────────────────────────────────
+  void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
   // ── juce::MidiInputCallback ───────────────────────────────────────────────
   void handleIncomingMidiMessage(juce::MidiInput *source,
@@ -73,6 +78,9 @@ public:
 private:
   MidiState &midiState;
   juce::AudioDeviceManager deviceManager;
+
+  // Multi-listener callback container
+  std::vector<std::function<void(const juce::MidiMessage &)>> midiListeners;
 
   // Audio Processing Components
   LayeredSynth synth;

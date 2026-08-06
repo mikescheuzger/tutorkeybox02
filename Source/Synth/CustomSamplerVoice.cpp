@@ -47,7 +47,7 @@ bool CustomSamplerVoice::canPlaySound(juce::SynthesiserSound* sound) {
 // =============================================================================
 // startNote — triggered when a MIDI note-on arrives and this voice is selected
 // =============================================================================
-void CustomSamplerVoice::startNote(int midiNoteNumber, float /*velocity*/,
+void CustomSamplerVoice::startNote(int midiNoteNumber, float velocity,
                                    juce::SynthesiserSound* sound,
                                    int /*currentPitchWheelPosition*/) {
     activeSound = static_cast<const CustomSamplerSound*>(sound);
@@ -70,9 +70,22 @@ void CustomSamplerVoice::startNote(int midiNoteNumber, float /*velocity*/,
                ? (noteHz / rootHz) * ((double)entry.sampleRate / outputSR)
                : 1.0;
 
-    // ── Static gain: zone multiplier × user input gain ────────────────────────
+    // ── Voice Stealing Crossfade De-Clicker Capture ───────────────────────────
+    if (adsrStage != AdsrStage::Idle) {
+        stolenLastL = lastOutputL;
+        stolenLastR = lastOutputR;
+        declickTotalSamples = (int)(0.002 * outputSR);
+        if (declickTotalSamples < 1) declickTotalSamples = 1;
+        declickSamplesRemaining = declickTotalSamples;
+    } else {
+        declickSamplesRemaining = 0;
+        stolenLastL = 0.0f;
+        stolenLastR = 0.0f;
+    }
+
+    // ── Static gain: velocity × zone multiplier × user input gain ─────────────
     // Computed once here to avoid per-sample multiplications in renderNextBlock
-    staticGain = entry.zoneGainMultiplier * sampleInputGain;
+    staticGain = velocity * entry.zoneGainMultiplier * sampleInputGain;
     lgain = 1.0f;
     rgain = 1.0f;
 
@@ -213,6 +226,17 @@ void CustomSamplerVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
         float finalGain = staticGain * adsrLevel;
         sampleL *= (lgain * finalGain);
         sampleR *= (rgain * finalGain);
+
+        // ── Voice Stealing Crossfade De-Clicker (2ms fade out for stolen voice) ─
+        if (declickSamplesRemaining > 0) {
+            float declickFade = (float)declickSamplesRemaining / (float)declickTotalSamples;
+            sampleL += stolenLastL * declickFade;
+            sampleR += stolenLastR * declickFade;
+            --declickSamplesRemaining;
+        }
+
+        lastOutputL = sampleL;
+        lastOutputR = sampleR;
 
         outL[i] += sampleL;
         if (outR != nullptr) outR[i] += sampleR;

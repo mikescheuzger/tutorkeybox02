@@ -47,6 +47,7 @@ void LayeredSynth::prepareToPlay(double sampleRate, int samplesPerBlock) {
 
         // Pre-allocate temp render buffer capacity ONCE (Zero Heap Allocation on audio thread)
         layer.tempBuffer.setSize(2, safeBlockSize, false, false, true);
+        layer.tempBuffer.clear();
     }
 }
 
@@ -179,25 +180,30 @@ void LayeredSynth::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
                 int note = juce::jlimit(0, 127, msg.getNoteNumber());
                 int velInt = juce::jlimit(0, 127, juce::roundToInt(msg.getFloatVelocity() * 127.0f));
 
-                // O(1) Instant candidate list lookup from grid
                 const auto& candidates = layer.soundLookupGrid[(size_t)note][(size_t)velInt];
-
                 if (!candidates.empty()) {
-                    auto matchingSound = selectBestVariant(candidates, activePedalState,
-                                                           (uint8_t)note,
-                                                           layer.roundRobinCounters[(size_t)note]);
-
-                    if (matchingSound != nullptr) {
+                    if (auto matchingSound = selectBestVariant(candidates, activePedalState, (uint8_t)note, layer.roundRobinCounters[(size_t)note])) {
+                        // 1. First look for an idle (free) voice
                         juce::SynthesiserVoice* voiceToUse = nullptr;
                         for (int v = 0; v < layer.synth.getNumVoices(); ++v) {
-                            auto* vPtr = layer.synth.getVoice(v);
-                            if (!vPtr->isVoiceActive()) {
-                                voiceToUse = vPtr;
+                            if (!layer.synth.getVoice(v)->isVoiceActive()) {
+                                voiceToUse = layer.synth.getVoice(v);
                                 break;
                             }
                         }
+
+                        // 2. If all voices are busy, steal the QUIETEST active voice (Quietest + LRU Stealing):
                         if (voiceToUse == nullptr && layer.synth.getNumVoices() > 0) {
-                            voiceToUse = layer.synth.getVoice(0); // Voice stealing
+                            float lowestVolume = 999999.0f;
+                            for (int v = 0; v < layer.synth.getNumVoices(); ++v) {
+                                if (auto* csv = dynamic_cast<CustomSamplerVoice*>(layer.synth.getVoice(v))) {
+                                    float level = csv->getCurrentLevel();
+                                    if (level < lowestVolume) {
+                                        lowestVolume = level;
+                                        voiceToUse = csv;
+                                    }
+                                }
+                            }
                         }
 
                         if (voiceToUse != nullptr) {
@@ -205,15 +211,26 @@ void LayeredSynth::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
                                                      msg.getChannel(), note,
                                                      msg.getFloatVelocity());
                         }
+
+                        if (auto* cs = dynamic_cast<CustomSamplerSound*>(matchingSound.get())) {
+                            juce::String sName = cs->getEntry().name;
+                            int vLow = (int)cs->getEntry().velZoneLow;
+                            int vHigh = (int)cs->getEntry().velZoneHigh;
+                            juce::MessageManager::callAsync([note, velInt, vLow, vHigh, sName] {
+                                std::cout << "[LIVE SAMPLE] Note: " << note << " | Vel: " << velInt
+                                          << " | File: " << sName.toStdString()
+                                          << " | VelZone: " << vLow << ".." << vHigh << std::endl;
+                            });
+                        }
                     }
                 }
             } else if (msg.isNoteOff()) {
                 layerMidi.addEvent(msg, samplePos);
 
-                // Trigger Release Trigger samples if present for this note
+                // Trigger Release Trigger samples if pedal is UP and present for this note
                 int note = juce::jlimit(0, 127, msg.getNoteNumber());
                 const auto& relPool = layer.releaseSounds[(size_t)note];
-                if (!relPool.empty()) {
+                if (!isPedalDown && !relPool.empty()) {
                     uint8_t dummyRR = 0;
                     auto relSound = selectBestVariant(relPool, activePedalState, (uint8_t)note, dummyRR);
                     if (relSound != nullptr) {
@@ -227,7 +244,7 @@ void LayeredSynth::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
                         if (voiceToUse != nullptr) {
                             layer.synth.triggerVoice(voiceToUse, relSound.get(),
                                                      msg.getChannel(), note,
-                                                     msg.getFloatVelocity());
+                                                     msg.getFloatVelocity() * 0.25f);
                         }
                     }
                 }
@@ -241,7 +258,10 @@ void LayeredSynth::renderNextBlock(juce::AudioBuffer<float>& outputBuffer,
         layer.synth.renderNextBlock(layer.tempBuffer, layerMidi, 0, numSamples);
 
         // Apply per-layer Resonant Low-Pass Filter
-        juce::dsp::AudioBlock<float> block(layer.tempBuffer);
+        juce::dsp::AudioBlock<float> block(layer.tempBuffer.getArrayOfWritePointers(),
+                                           (size_t)layer.tempBuffer.getNumChannels(),
+                                           (size_t)0,
+                                           (size_t)numSamples);
         layer.filter.process(juce::dsp::ProcessContextReplacing<float>(block));
 
         // Mix to Main Output Buffer
@@ -278,6 +298,10 @@ void LayeredSynth::addNoteOnSoundToLayer(int layerIndex, juce::SynthesiserSound:
                     layer.soundLookupGrid[(size_t)n][(size_t)v].push_back(sound);
                 }
             }
+
+            std::cout << "[GRID REGISTRATION] Sound: " << entry.name 
+                      << " | NoteRange: " << kLow << ".." << kHigh 
+                      << " | VelRange: " << vLow << ".." << vHigh << std::endl;
         }
     }
 }
@@ -285,7 +309,6 @@ void LayeredSynth::addNoteOnSoundToLayer(int layerIndex, juce::SynthesiserSound:
 void LayeredSynth::addReleaseSoundToLayer(int layerIndex, juce::SynthesiserSound::Ptr sound) {
     if (layerIndex >= 0 && layerIndex < NUM_LAYERS && sound != nullptr) {
         auto& layer = layers[(size_t)layerIndex];
-        layer.synth.addSound(sound);
 
         if (auto* cs = dynamic_cast<CustomSamplerSound*>(sound.get())) {
             const auto& entry = cs->getEntry();
@@ -302,7 +325,6 @@ void LayeredSynth::addReleaseSoundToLayer(int layerIndex, juce::SynthesiserSound
 void LayeredSynth::addPedalSoundToLayer(int layerIndex, juce::SynthesiserSound::Ptr sound) {
     if (layerIndex >= 0 && layerIndex < NUM_LAYERS && sound != nullptr) {
         auto& layer = layers[(size_t)layerIndex];
-        layer.synth.addSound(sound);
 
         if (auto* cs = dynamic_cast<CustomSamplerSound*>(sound.get())) {
             if (cs->getSampleType() == SampleType::PedalDown) {

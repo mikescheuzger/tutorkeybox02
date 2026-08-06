@@ -3,6 +3,7 @@
 #include "../Audio/AudioEngine.h"
 #include "../Core/PresetManager.h"
 #include "../Network/DeployClient.h"
+#include "AudioSettingsWindow.h"
 #include "MidiConsoleWindow.h"
 
 // =============================================================================
@@ -11,6 +12,7 @@
 // Features:
 //   • Dynamic Hardware Connection Status Badge (Green = Pi Connected, Cyan = Standalone)
 //   • One-Click "Deploy to KeyBox" Button with Container Transfer Progress Bar
+//   • "Audio & MIDI Setup" Button (Opens AudioSettingsWindow)
 //   • "MIDI Console Log" Button (Opens detached MidiConsoleWindow)
 //   • Save & Load Preset JSON Buttons
 // =============================================================================
@@ -40,12 +42,14 @@ private:
     bool             isPiConnected{ false };
     juce::String     deployStatusMessage;
 
+    juce::TextButton audioSettingsButton{ "Audio & MIDI Setup" };
     juce::TextButton midiConsoleButton{ "MIDI Console Log" };
     juce::TextButton savePresetButton{ "Save Preset" };
     juce::TextButton loadPresetButton{ "Load Preset" };
 
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<MidiConsoleWindow> consoleWindow;
+    std::unique_ptr<AudioSettingsWindow> audioSettingsWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DeployControlBar)
 };

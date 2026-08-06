@@ -16,6 +16,21 @@ DeployControlBar::DeployControlBar(AudioEngine &engineToControl,
                          juce::Colours::white);
   deployButton.onClick = [this] { startDeployment(); };
 
+  // Audio & MIDI Setup Button
+  addAndMakeVisible(audioSettingsButton);
+  audioSettingsButton.setColour(juce::TextButton::buttonColourId,
+                                juce::Colour(0xff27272a));
+  audioSettingsButton.setColour(juce::TextButton::textColourOffId,
+                                juce::Colour(0xff38bdf8));
+  audioSettingsButton.onClick = [this] {
+    if (audioSettingsWindow == nullptr) {
+      audioSettingsWindow =
+          std::make_unique<AudioSettingsWindow>(audioEngine.getDeviceManager());
+    }
+    audioSettingsWindow->setVisible(true);
+    audioSettingsWindow->toFront(true);
+  };
+
   // MIDI Console Log Button
   addAndMakeVisible(midiConsoleButton);
   midiConsoleButton.setColour(juce::TextButton::buttonColourId,
@@ -25,11 +40,18 @@ DeployControlBar::DeployControlBar(AudioEngine &engineToControl,
   midiConsoleButton.onClick = [this] {
     if (consoleWindow == nullptr) {
       consoleWindow =
-          std::make_unique<MidiConsoleWindow>(audioEngine.getMidiState());
+          std::make_unique<MidiConsoleWindow>(audioEngine);
     }
     consoleWindow->setVisible(true);
     consoleWindow->toFront(true);
   };
+
+  // Wire AudioEngine live MIDI callback via multi-listener broadcast
+  audioEngine.addMidiMessageListener([this](const juce::MidiMessage& msg) {
+    if (consoleWindow != nullptr && consoleWindow->isVisible()) {
+      consoleWindow->logMidiMessage(msg);
+    }
+  });
 
   // Save & Load Preset Buttons
   addAndMakeVisible(savePresetButton);
@@ -142,16 +164,19 @@ void DeployControlBar::paint(juce::Graphics &g) {
 void DeployControlBar::resized() {
   auto bounds = getLocalBounds().reduced(8);
 
-  statusBadgeLabel.setBounds(bounds.removeFromLeft(280));
-  bounds.removeFromLeft(12);
+  statusBadgeLabel.setBounds(bounds.removeFromLeft(270));
+  bounds.removeFromLeft(8);
 
-  deployButton.setBounds(bounds.removeFromLeft(160));
-  bounds.removeFromLeft(12);
+  deployButton.setBounds(bounds.removeFromLeft(150));
+  bounds.removeFromLeft(8);
 
-  midiConsoleButton.setBounds(bounds.removeFromLeft(150));
-  bounds.removeFromLeft(12);
+  audioSettingsButton.setBounds(bounds.removeFromLeft(150));
+  bounds.removeFromLeft(8);
 
-  loadPresetButton.setBounds(bounds.removeFromRight(110));
+  midiConsoleButton.setBounds(bounds.removeFromLeft(140));
+  bounds.removeFromLeft(8);
+
+  loadPresetButton.setBounds(bounds.removeFromRight(105));
   bounds.removeFromRight(8);
-  savePresetButton.setBounds(bounds.removeFromRight(110));
+  savePresetButton.setBounds(bounds.removeFromRight(105));
 }

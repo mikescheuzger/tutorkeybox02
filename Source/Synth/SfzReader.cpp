@@ -1,5 +1,6 @@
 #include "SfzReader.h"
 #include "LayeredSynth.h"
+#include <map>
 
 // Helper to convert note names like C4, D#3, Eb2 to MIDI number
 static int noteNameToMidi(const juce::String& name) {
@@ -35,22 +36,110 @@ static int noteNameToMidi(const juce::String& name) {
     return juce::jlimit(0, 127, (octave + 1) * 12 + semitone);
 }
 
+// Recursive parser for SFZ files resolving #include and #define directives
+static void readSfzFileRecursive(const juce::File& file, const juce::File& rootDir, juce::StringArray& outLines, std::map<juce::String, juce::String>& defines) {
+    if (!file.existsAsFile()) return;
+
+    juce::String fileText = file.loadFileAsString();
+    juce::StringArray rawLines;
+    rawLines.addLines(fileText);
+
+    juce::File parentDir = file.getParentDirectory();
+
+    for (auto line : rawLines) {
+        line = line.trim();
+        if (line.isEmpty() || line.startsWith("//")) continue;
+
+        // 1. Process #define $MACRO value
+        if (line.startsWithIgnoreCase("#define")) {
+            juce::String rest = line.substring(7).trim();
+            auto key = rest.upToFirstOccurrenceOf(" ", false, true).trim();
+            auto val = rest.fromFirstOccurrenceOf(" ", false, true).trim();
+            if (key.isNotEmpty()) {
+                defines[key] = val;
+            }
+            continue;
+        }
+
+        // 2. Process #include "subfile.txt"
+        if (line.containsIgnoreCase("#include")) {
+            juce::StringArray tokens;
+            tokens.addTokens(line, " \t", "\"");
+            juce::String lineClean = "";
+            juce::StringArray incFilesToRead;
+
+            for (const auto& tok : tokens) {
+                juce::String cleanTok = tok.unquoted().trim();
+                if (cleanTok.startsWithIgnoreCase("#include")) continue;
+
+                if (cleanTok.endsWithIgnoreCase(".txt") || cleanTok.endsWithIgnoreCase(".sfz")) {
+                    incFilesToRead.add(cleanTok);
+                } else {
+                    lineClean += tok + " ";
+                }
+            }
+
+            lineClean = lineClean.trim();
+
+            // Substitute defines in group line if present
+            for (const auto& kv : defines) {
+                lineClean = lineClean.replace(kv.first, kv.second);
+            }
+
+            if (lineClean.isNotEmpty()) {
+                outLines.add(lineClean);
+            }
+
+            // Recursively expand includes AFTER group parameters are emitted!
+            for (const auto& incPath : incFilesToRead) {
+                juce::File incFile = rootDir.getChildFile(incPath);
+                if (!incFile.existsAsFile()) {
+                    incFile = parentDir.getChildFile(incPath);
+                }
+                if (!incFile.existsAsFile()) {
+                    incFile = rootDir.getChildFile("Data").getChildFile(juce::File(incPath).getFileName());
+                }
+                if (incFile.existsAsFile()) {
+                    readSfzFileRecursive(incFile, rootDir, outLines, defines);
+                }
+            }
+
+            continue;
+        }
+
+        // 3. Substitute defines
+        for (const auto& kv : defines) {
+            line = line.replace(kv.first, kv.second);
+        }
+
+        if (line.isNotEmpty()) {
+            outLines.add(line);
+        }
+    }
+}
+
 std::vector<SfzRegion> SfzReader::parseSfzRegions(const juce::File& sfzFile) {
     std::vector<SfzRegion> regions;
     if (!sfzFile.existsAsFile()) return regions;
 
     juce::StringArray lines;
-    lines.addLines(sfzFile.loadFileAsString());
+    std::map<juce::String, juce::String> defines;
+    juce::File rootDir = sfzFile.getParentDirectory();
+    readSfzFileRecursive(sfzFile, rootDir, lines, defines);
 
     SfzRegion currentGroupDefaults;
     SfzRegion currentRegion;
     bool inRegion = false;
+    juce::String defaultPath = "";
 
     for (auto line : lines) {
         line = line.trim();
         if (line.isEmpty() || line.startsWith("//")) continue;
 
-        if (line.startsWithIgnoreCase("<group>")) {
+        if (line.startsWithIgnoreCase("default_path=")) {
+            defaultPath = line.fromFirstOccurrenceOf("default_path=", false, true).trim();
+        }
+        else if (line.startsWithIgnoreCase("<group>")) {
             currentGroupDefaults = SfzRegion{};
             juce::String rest = line.substring(7);
             juce::StringArray tokens;
@@ -61,18 +150,19 @@ std::vector<SfzRegion> SfzReader::parseSfzRegions(const juce::File& sfzFile) {
                     auto key = tok.upToFirstOccurrenceOf("=", false, true).trim();
                     auto val = tok.fromFirstOccurrenceOf("=", false, true).trim();
 
-                    if (key.equalsIgnoreCase("lokey")) currentGroupDefaults.lokey = noteNameToMidi(val);
-                    else if (key.equalsIgnoreCase("hikey")) currentGroupDefaults.hikey = noteNameToMidi(val);
-                    else if (key.equalsIgnoreCase("pitch_keycenter")) currentGroupDefaults.pitchKeycenter = noteNameToMidi(val);
-                    else if (key.equalsIgnoreCase("lovel")) currentGroupDefaults.lovel = val.getIntValue();
-                    else if (key.equalsIgnoreCase("hivel")) currentGroupDefaults.hivel = val.getIntValue();
-                    else if (key.equalsIgnoreCase("trigger") && val.equalsIgnoreCase("release"))
-                        currentGroupDefaults.sampleType = SampleType::ReleaseTrigger;
+                    if (key == "lokey") currentGroupDefaults.lokey = noteNameToMidi(val);
+                    else if (key == "hikey") currentGroupDefaults.hikey = noteNameToMidi(val);
+                    else if (key == "pitch_keycenter") currentGroupDefaults.pitchKeycenter = noteNameToMidi(val);
+                    else if (key == "lovel") currentGroupDefaults.lovel = val.getIntValue();
+                    else if (key == "hivel") currentGroupDefaults.hivel = val.getIntValue();
                 }
             }
         }
         else if (line.startsWithIgnoreCase("<region>")) {
             if (inRegion && currentRegion.samplePath.isNotEmpty()) {
+                if (defaultPath.isNotEmpty() && !currentRegion.samplePath.startsWithIgnoreCase(defaultPath)) {
+                    currentRegion.samplePath = defaultPath + currentRegion.samplePath;
+                }
                 regions.push_back(currentRegion);
             }
             currentRegion = currentGroupDefaults;
@@ -87,37 +177,44 @@ std::vector<SfzRegion> SfzReader::parseSfzRegions(const juce::File& sfzFile) {
                     auto key = tok.upToFirstOccurrenceOf("=", false, true).trim();
                     auto val = tok.fromFirstOccurrenceOf("=", false, true).trim();
 
-                    if (key.equalsIgnoreCase("sample")) currentRegion.samplePath = val;
-                    else if (key.equalsIgnoreCase("lokey")) currentRegion.lokey = noteNameToMidi(val);
-                    else if (key.equalsIgnoreCase("hikey")) currentRegion.hikey = noteNameToMidi(val);
-                    else if (key.equalsIgnoreCase("key")) {
+                    if (key == "sample") currentRegion.samplePath = val;
+                    else if (key == "lokey") currentRegion.lokey = noteNameToMidi(val);
+                    else if (key == "hikey") currentRegion.hikey = noteNameToMidi(val);
+                    else if (key == "key") {
                         int k = noteNameToMidi(val);
                         currentRegion.lokey = k;
                         currentRegion.hikey = k;
                         currentRegion.pitchKeycenter = k;
                     }
-                    else if (key.equalsIgnoreCase("pitch_keycenter")) currentRegion.pitchKeycenter = noteNameToMidi(val);
-                    else if (key.equalsIgnoreCase("lovel")) currentRegion.lovel = val.getIntValue();
-                    else if (key.equalsIgnoreCase("hivel")) currentRegion.hivel = val.getIntValue();
-                    else if (key.equalsIgnoreCase("trigger") && val.equalsIgnoreCase("release"))
-                        currentRegion.sampleType = SampleType::ReleaseTrigger;
+                    else if (key == "pitch_keycenter") currentRegion.pitchKeycenter = noteNameToMidi(val);
+                    else if (key == "lovel") currentRegion.lovel = val.getIntValue();
+                    else if (key == "hivel") currentRegion.hivel = val.getIntValue();
                 }
             }
         }
     }
 
     if (inRegion && currentRegion.samplePath.isNotEmpty()) {
+        if (defaultPath.isNotEmpty() && !currentRegion.samplePath.startsWithIgnoreCase(defaultPath)) {
+            currentRegion.samplePath = defaultPath + currentRegion.samplePath;
+        }
         regions.push_back(currentRegion);
     }
 
     return regions;
 }
 
+// Global persistent storage of audio buffers loaded from SFZ/WAV files to prevent dangling pointers
+std::vector<std::shared_ptr<juce::AudioBuffer<float>>> g_sfzPersistentBuffers;
+
 bool SfzReader::loadSfzFile(const juce::File& sfzFile, LayeredSynth& synthTarget, int targetLayerIndex) {
     if (!sfzFile.existsAsFile()) return false;
 
     auto regions = parseSfzRegions(sfzFile);
-    if (regions.empty()) return false;
+    if (regions.empty()) {
+        juce::Logger::writeToLog("SfzReader Error: No regions found in " + sfzFile.getFullPathName());
+        return false;
+    }
 
     juce::File baseDir = sfzFile.getParentDirectory();
     juce::AudioFormatManager formatMgr;
@@ -127,11 +224,17 @@ bool SfzReader::loadSfzFile(const juce::File& sfzFile, LayeredSynth& synthTarget
     int loadedCount = 0;
 
     for (const auto& r : regions) {
+        if (r.samplePath.containsIgnoreCase("harmL") || r.samplePath.containsIgnoreCase("harmS") ||
+            r.samplePath.containsIgnoreCase("harm") || r.samplePath.containsIgnoreCase("resonance") ||
+            r.samplePath.containsIgnoreCase("sympathetic")) {
+            juce::Logger::writeToLog("SfzReader: Excluded harmonic resonance layer -> " + r.samplePath);
+            continue;
+        }
+
         juce::File audioFile = baseDir.getChildFile(r.samplePath);
         if (!audioFile.existsAsFile()) {
             audioFile = baseDir.getChildFile("Samples").getChildFile(r.samplePath);
         }
-        if (!audioFile.existsAsFile()) continue;
 
         std::unique_ptr<juce::AudioFormatReader> reader(formatMgr.createReaderFor(audioFile));
         if (reader == nullptr) continue;
@@ -140,14 +243,15 @@ bool SfzReader::loadSfzFile(const juce::File& sfzFile, LayeredSynth& synthTarget
         int numChannels = (int)reader->numChannels;
         double sampleRate = reader->sampleRate;
 
-        // Read audio into RAM buffer
-        juce::AudioBuffer<float> buffer(numChannels, numSamples);
-        reader->read(&buffer, 0, numSamples, 0, true, true);
+        // Allocate persistent heap audio buffer
+        auto heapBuffer = std::make_shared<juce::AudioBuffer<float>>(numChannels, numSamples);
+        reader->read(heapBuffer.get(), 0, numSamples, 0, true, true);
+        g_sfzPersistentBuffers.push_back(heapBuffer);
 
-        // Build channel pointers vector
+        // Build persistent channel pointers
         std::vector<const float*> channelPointers((size_t)numChannels);
         for (int ch = 0; ch < numChannels; ++ch)
-            channelPointers[(size_t)ch] = buffer.getReadPointer(ch);
+            channelPointers[(size_t)ch] = heapBuffer->getReadPointer(ch);
 
         // Build SampleEntry metadata
         SampleEntry entry{};
@@ -159,7 +263,17 @@ bool SfzReader::loadSfzFile(const juce::File& sfzFile, LayeredSynth& synthTarget
         entry.velZoneLow = (uint8_t)r.lovel;
         entry.velZoneHigh = (uint8_t)r.hivel;
         entry.zoneGainMultiplier = 1.0f;
-        entry.sampleType = r.sampleType;
+        juce::String stem = audioFile.getFileNameWithoutExtension();
+        if (stem.startsWithIgnoreCase("pedalD") || stem.startsWithIgnoreCase("pedal_down")) {
+            entry.sampleType = SampleType::PedalDown;
+        } else if (stem.startsWithIgnoreCase("pedalU") || stem.startsWithIgnoreCase("pedal_up")) {
+            entry.sampleType = SampleType::PedalUp;
+        } else if (stem.startsWithIgnoreCase("rel") || stem.startsWithIgnoreCase("release")) {
+            entry.sampleType = SampleType::ReleaseTrigger;
+        } else {
+            entry.sampleType = SampleType::NoteOn;
+        }
+
         entry.velocityLayer = VelocityLayer::P;
         entry.pedalState = PedalState::NoPedal;
         entry.numChannels = (uint32_t)numChannels;
@@ -167,9 +281,9 @@ bool SfzReader::loadSfzFile(const juce::File& sfzFile, LayeredSynth& synthTarget
         entry.totalNumSamples = (uint32_t)numSamples;
         entry.attackSampleSize = (uint32_t)numSamples;
 
-        juce::SynthesiserSound::Ptr sound = new CustomSamplerSound(entry, buffer, channelPointers, numSamples, sampleRate, nullptr);
+        juce::SynthesiserSound::Ptr sound = new CustomSamplerSound(entry, *heapBuffer, channelPointers, numSamples, sampleRate, nullptr);
 
-        switch (r.sampleType) {
+        switch (entry.sampleType) {
             case SampleType::NoteOn:
                 synthTarget.addNoteOnSoundToLayer(targetLayerIndex, sound);
                 break;

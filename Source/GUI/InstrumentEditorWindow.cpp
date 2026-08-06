@@ -104,6 +104,10 @@ void InstrumentEditorWindow::AdsrCanvas::mouseDrag(const juce::MouseEvent& e) {
     presetManager.setLayerPreset(layerIndex, layer);
     synth.setLayerAdsr(layerIndex, { layer.attackMs, layer.decayMs, layer.sustainLevel, layer.releaseMs });
     repaint();
+
+    if (onAdsrChanged != nullptr) {
+        onAdsrChanged();
+    }
 }
 
 // =============================================================================
@@ -168,18 +172,34 @@ InstrumentEditorWindow::EditorComponent::EditorComponent(AudioEngine& engine, Pr
     refreshInstrumentList();
 
     instrumentDropDown.onChange = [this] {
-        juce::String selectedName = instrumentDropDown.getItemText(instrumentDropDown.getSelectedItemIndex());
-        if (selectedName.isNotEmpty()) {
-            auto layer = presetManager.getLayerPreset(layerIndex);
-            layer.sampleContainerPath = selectedName;
-            presetManager.setLayerPreset(layerIndex, layer);
-
-            juce::File binFile = juce::File::getCurrentWorkingDirectory().getChildFile(selectedName);
-            if (binFile.existsAsFile()) {
-                SampleContainerReader::loadContainerFile(binFile, audioEngine.getSynth(), layerIndex);
-            }
-            updateSyncStatus();
+        int selIdx = instrumentDropDown.getSelectedItemIndex();
+        if (selIdx >= 0 && selIdx < (int)availableFiles.size()) {
+            loadFileIntoLayer(availableFiles[(size_t)selIdx]);
         }
+    };
+
+    addAndMakeVisible(browseButton);
+    browseButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff27272a));
+    browseButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff38bdf8));
+    browseButton.onClick = [this] {
+        juce::File defaultSamplesDir = juce::File::getCurrentWorkingDirectory().getChildFile("Samples");
+        if (!defaultSamplesDir.isDirectory()) {
+            defaultSamplesDir = juce::File("/Users/mikescheuzger/Desktop/TutorKeyBox02/Samples");
+        }
+
+        fileChooser = std::make_unique<juce::FileChooser>(
+            "Select Instrument (.sfz, .bin, or Raw Sample Folder)",
+            defaultSamplesDir,
+            "*.sfz;*.bin;*.wav;*.flac");
+
+        fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::canSelectDirectories,
+            [this](const juce::FileChooser& fc) {
+                auto file = fc.getResult();
+                if (file.exists()) {
+                    loadFileIntoLayer(file);
+                    refreshInstrumentList();
+                }
+            });
     };
 
     addAndMakeVisible(syncBadgeLabel);
@@ -207,12 +227,12 @@ InstrumentEditorWindow::EditorComponent::EditorComponent(AudioEngine& engine, Pr
     inputGainLabel.setFont(juce::FontOptions(10.0f, juce::Font::plain));
     inputGainLabel.setJustificationType(juce::Justification::centred);
 
-    // ADSR Sliders
-    auto setupSlider = [this](juce::Slider& s, juce::Label& l, double minV, double maxV, double defV) {
+    // ADSR Sliders (Sustain step set to 0.01 for smooth 1% control)
+    auto setupSlider = [this](juce::Slider& s, juce::Label& l, double minV, double maxV, double defV, double step) {
         addAndMakeVisible(s);
         s.setSliderStyle(juce::Slider::LinearVertical);
         s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 45, 16);
-        s.setRange(minV, maxV, 0.1);
+        s.setRange(minV, maxV, step);
         s.setValue(defV);
         s.onValueChange = [this] {
             auto layer = presetManager.getLayerPreset(layerIndex);
@@ -231,29 +251,70 @@ InstrumentEditorWindow::EditorComponent::EditorComponent(AudioEngine& engine, Pr
     };
 
     const auto& lp = presetManager.getLayerPreset(layerIndex);
-    setupSlider(attackSlider, attackLabel, 0.1, 5000.0, lp.attackMs);
-    setupSlider(decaySlider, decayLabel, 1.0, 10000.0, lp.decayMs);
-    setupSlider(sustainSlider, sustainLabel, 0.0, 1.0, lp.sustainLevel);
-    setupSlider(releaseSlider, releaseLabel, 1.0, 10000.0, lp.releaseMs);
+    setupSlider(attackSlider, attackLabel, 0.1, 5000.0, lp.attackMs, 0.1);
+    setupSlider(decaySlider, decayLabel, 1.0, 10000.0, lp.decayMs, 0.1);
+    setupSlider(sustainSlider, sustainLabel, 0.0, 1.0, lp.sustainLevel, 0.01); // Smooth 0.01 step!
+    setupSlider(releaseSlider, releaseLabel, 1.0, 10000.0, lp.releaseMs, 0.1);
+
+    // Wire Canvas dragging to update Sliders in real-time
+    adsrCanvas.onAdsrChanged = [this] {
+        const auto& layer = presetManager.getLayerPreset(layerIndex);
+        attackSlider.setValue(layer.attackMs, juce::dontSendNotification);
+        decaySlider.setValue(layer.decayMs, juce::dontSendNotification);
+        sustainSlider.setValue(layer.sustainLevel, juce::dontSendNotification);
+        releaseSlider.setValue(layer.releaseMs, juce::dontSendNotification);
+    };
+
+    audioEngine.getMidiState().addChangeListener(this);
+}
+
+InstrumentEditorWindow::EditorComponent::~EditorComponent() {
+    audioEngine.getMidiState().removeChangeListener(this);
+}
+
+void InstrumentEditorWindow::EditorComponent::changeListenerCallback(juce::ChangeBroadcaster*) {
+    juce::String activeSample = audioEngine.getMidiState().lastSampleName;
+    if (activeSample.isNotEmpty() && activeSample != "None") {
+        waveformViewer.setSampleInfo(activeSample, 0.0f);
+    }
+}
+
+void InstrumentEditorWindow::EditorComponent::loadFileIntoLayer(const juce::File& file) {
+    if (!file.existsAsFile()) return;
+
+    bool loaded = SampleContainerReader::loadContainerFile(file, audioEngine.getSynth(), layerIndex);
+
+    if (loaded) {
+        auto layer = presetManager.getLayerPreset(layerIndex);
+        layer.sampleContainerPath = file.getFileName();
+        presetManager.setLayerPreset(layerIndex, layer);
+        waveformViewer.setSampleInfo(file.getFileName(), 0.0f);
+        updateSyncStatus();
+        juce::Logger::writeToLog("InstrumentEditorWindow: Successfully loaded " + file.getFileName() + " into Layer " + juce::String(layerIndex + 1));
+    }
 }
 
 void InstrumentEditorWindow::EditorComponent::refreshInstrumentList() {
     instrumentDropDown.clear();
+    availableFiles.clear();
 
-    // Scan for available .bin container files
-    juce::File currentDir = juce::File::getCurrentWorkingDirectory();
-    auto binFiles = currentDir.findChildFiles(juce::File::findFiles, false, "*.bin");
+    juce::File samplesDir = juce::File::getCurrentWorkingDirectory().getChildFile("Samples");
+    if (samplesDir.isDirectory()) {
+        auto foundFiles = samplesDir.findChildFiles(juce::File::findFiles, true, "*.sfz;*.bin");
 
-    int id = 1;
-    for (const auto& file : binFiles) {
-        instrumentDropDown.addItem(file.getFileName(), id++);
+        int id = 1;
+        for (const auto& file : foundFiles) {
+            availableFiles.push_back(file);
+            juce::String tag = file.getFileExtension().equalsIgnoreCase(".sfz") ? "[SFZ] " : "[BIN] ";
+            instrumentDropDown.addItem(tag + file.getFileName(), id++);
+        }
     }
 
-    if (id == 1) {
-        instrumentDropDown.addItem("NeumannM49.bin", 1);
-        instrumentDropDown.addItem("SalamanderGrand.bin", 2);
+    if (availableFiles.empty()) {
+        instrumentDropDown.addItem("No Instruments Found in ./Samples", 1);
+    } else {
+        instrumentDropDown.setSelectedId(1, juce::dontSendNotification);
     }
-    instrumentDropDown.setSelectedId(1, juce::dontSendNotification);
 }
 
 void InstrumentEditorWindow::EditorComponent::updateSyncStatus() {
@@ -272,9 +333,11 @@ void InstrumentEditorWindow::EditorComponent::resized() {
 
     // Top Header: Instrument Selector & Sync Badge
     auto header = bounds.removeFromTop(36);
-    instrumentLabel.setBounds(header.removeFromLeft(140));
-    instrumentDropDown.setBounds(header.removeFromLeft(200));
-    header.removeFromLeft(16);
+    instrumentLabel.setBounds(header.removeFromLeft(180));
+    instrumentDropDown.setBounds(header.removeFromLeft(180));
+    header.removeFromLeft(8);
+    browseButton.setBounds(header.removeFromLeft(150));
+    header.removeFromLeft(12);
     syncBadgeLabel.setBounds(header);
 
     bounds.removeFromTop(8);
@@ -325,8 +388,8 @@ InstrumentEditorWindow::InstrumentEditorWindow(AudioEngine& engineToControl, Pre
     editorComponent = std::make_unique<EditorComponent>(engineToControl, presetTarget, targetLayerIndex);
     setContentNonOwned(editorComponent.get(), true);
     setResizable(true, true);
-    setResizeLimits(650, 420, 1100, 750);
-    centreWithSize(750, 480);
+    setResizeLimits(700, 420, 1200, 750);
+    centreWithSize(800, 480);
 
     audioEngine.getMidiState().addChangeListener(this);
     startTimerHz(30); // 30 Hz playhead & UI animation timer

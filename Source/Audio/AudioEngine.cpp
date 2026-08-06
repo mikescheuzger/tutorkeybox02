@@ -9,6 +9,12 @@ AudioEngine::AudioEngine(MidiState &stateToUpdate)
 
 AudioEngine::~AudioEngine() { shutdown(); }
 
+void AudioEngine::addMidiMessageListener(std::function<void(const juce::MidiMessage &)> listener) {
+  if (listener != nullptr) {
+    midiListeners.push_back(listener);
+  }
+}
+
 // =============================================================================
 // initialize — Scans audio devices, selects best hardware output (iO|2, ALSA,
 // CoreAudio)
@@ -93,13 +99,13 @@ bool AudioEngine::initialize() {
         juce::String(currentDevice->getCurrentSampleRate()) + " Hz, " +
         juce::String(currentDevice->getCurrentBufferSizeSamples()) +
         " samples]");
-  } else {
-    juce::Logger::writeToLog(
-        "AudioEngine Warning: No active audio output device opened!");
   }
 
   deviceManager.removeAudioCallback(this);
   deviceManager.addAudioCallback(this);
+
+  // Register ChangeListener on deviceManager for live MIDI device toggling
+  deviceManager.addChangeListener(this);
   refreshMidiInputs();
   sendChangeMessage();
 
@@ -107,17 +113,24 @@ bool AudioEngine::initialize() {
 }
 
 // =============================================================================
-// Live MIDI Hotplug Device Scanner
+// Live MIDI Hotplug Device Scanner & Callback Registration
 // =============================================================================
 void AudioEngine::refreshMidiInputs() {
   auto midiInputs = juce::MidiInput::getAvailableDevices();
   for (const auto &input : midiInputs) {
     if (!deviceManager.isMidiInputDeviceEnabled(input.identifier)) {
       deviceManager.setMidiInputDeviceEnabled(input.identifier, true);
+    }
+    // Always bind AudioEngine callback recipient to all enabled MIDI inputs
+    if (deviceManager.isMidiInputDeviceEnabled(input.identifier)) {
       deviceManager.addMidiInputDeviceCallback(input.identifier, this);
       juce::Logger::writeToLog("Connected MIDI Input Device: " + input.name);
     }
   }
+}
+
+void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
+  refreshMidiInputs();
 }
 
 juce::String AudioEngine::getActiveAudioDeviceName() const {
@@ -126,6 +139,8 @@ juce::String AudioEngine::getActiveAudioDeviceName() const {
 }
 
 void AudioEngine::shutdown() {
+  deviceManager.removeChangeListener(this);
+
   auto midiInputs = juce::MidiInput::getAvailableDevices();
   for (const auto &input : midiInputs) {
     deviceManager.removeMidiInputDeviceCallback(input.identifier, this);
@@ -170,15 +185,15 @@ void AudioEngine::handleIncomingMidiMessage(juce::MidiInput * /*source*/,
     midiState.setSustainPedal(pedalDown);
   }
 
-  // Thread-safe dispatch of MIDI callback to Message thread (prevents audio
-  // thread lockups)
-  if (onMidiMessageReceived != nullptr) {
-    juce::MessageManager::callAsync([this, message] {
-      if (onMidiMessageReceived != nullptr) {
-        onMidiMessageReceived(message);
+  // Thread-safe broadcast of MIDI callback to all registered listeners & terminal stdout
+  juce::MessageManager::callAsync([this, message] {
+    std::cout << "[MIDI HARDWARE INPUT] " << message.getDescription().toStdString() << std::endl;
+    for (const auto &listener : midiListeners) {
+      if (listener != nullptr) {
+        listener(message);
       }
-    });
-  }
+    }
+  });
 
   const juce::ScopedLock sl(midiLock);
   incomingMidiBuffer.addEvent(message, 0);
@@ -224,15 +239,12 @@ void AudioEngine::audioDeviceIOCallbackWithContext(
   }
 
   // ── Step 1: Render LayeredSynth (4 Layers -> buffer, AUX sends -> auxBuffer)
-  // ──
   synth.renderNextBlock(buffer, midiMessagesToProcess, 0, numSamples,
                         &auxBuffer);
 
   // ── Step 2: Process FXChannel (Reverb + Delay -> sums to buffer)
-  // ──────────────
   fxChannel.processBlock(auxBuffer, buffer, 0, numSamples);
 
-  // ── Step 3: Process MasterChain (Compressor -> Limiter -> Clipper -> Gain ->
-  // VU Meter)
+  // ── Step 3: Process MasterChain (Compressor -> Limiter -> Clipper -> Gain -> VU Meter)
   masterChain.processBlock(buffer, 0, numSamples);
 }

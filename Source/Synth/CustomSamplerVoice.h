@@ -42,6 +42,7 @@ public:
                          int startSample, int numSamples) override;
 
     bool isVoiceActive() const override { return adsrStage != AdsrStage::Idle; }
+    float getCurrentLevel() const noexcept { return adsrLevel * staticGain; }
 
 private:
     MidiState* midiState{ nullptr };
@@ -64,6 +65,14 @@ private:
     float adsrAttackInc{ 0.0f };
     float adsrDecayDec{ 0.0f };
     float adsrReleaseDec{ 0.0f };
+
+    // Voice Stealing De-Clicker (2ms crossfade ramp)
+    float lastOutputL{ 0.0f };
+    float lastOutputR{ 0.0f };
+    float stolenLastL{ 0.0f };
+    float stolenLastR{ 0.0f };
+    int declickSamplesRemaining{ 0 };
+    int declickTotalSamples{ 96 };
 
     void computeAdsrRates();
 

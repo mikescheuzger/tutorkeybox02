@@ -83,10 +83,6 @@ public:
     static constexpr int NUM_LAYERS = 4;
     static constexpr int VOICES_PER_LAYER = 32;
 
-private:
-    MidiState& midiState;
-
-    // ── Per-Layer Internal Data Structure ────────────────────────────────────
     struct Layer {
         LayerSynthesiser synth;
 
@@ -119,6 +115,12 @@ private:
         // Per-note round robin tracking counters
         std::array<uint8_t, 128> roundRobinCounters{ 0 };
     };
+
+    Layer& getLayer(int index) { return layers[(size_t)juce::jlimit(0, NUM_LAYERS - 1, index)]; }
+    const Layer& getLayer(int index) const { return layers[(size_t)juce::jlimit(0, NUM_LAYERS - 1, index)]; }
+
+private:
+    MidiState& midiState;
 
     std::array<Layer, NUM_LAYERS> layers;
 

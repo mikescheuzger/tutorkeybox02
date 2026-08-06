@@ -7,14 +7,6 @@
 
 // =============================================================================
 // InstrumentEditorWindow — Deep Instrument Sound Design & ADSR Editor Window
-//
-// Features:
-//   • Instrument Selection Dropdown (ComboBox of prepared .bin container files)
-//   • Hardware Sync Badge Indicator ("Mac Engine Only" vs "KeyBox Hardware Synced")
-//   • Raw Sample Input Gain Knob / Slider
-//   • Interactive Draggable ADSR Curve Canvas (Attack, Decay, Sustain, Release)
-//   • Animated Waveform Viewer with real-time Playhead position marker
-//   • Velocity Zone & Round-Robin Sample Map Overview
 // =============================================================================
 class InstrumentEditorWindow : public juce::DocumentWindow,
                                public juce::ChangeListener,
@@ -42,6 +34,8 @@ private:
         void mouseDown(const juce::MouseEvent& e) override;
         void mouseDrag(const juce::MouseEvent& e) override;
 
+        std::function<void()> onAdsrChanged;
+
     private:
         PresetManager& presetManager;
         LayeredSynth&  synth;
@@ -61,20 +55,21 @@ private:
         float        playheadPosition{ 0.0f };
     };
 
-    struct EditorComponent : public juce::Component {
+    struct EditorComponent : public juce::Component, public juce::ChangeListener {
         AudioEngine&   audioEngine;
         PresetManager& presetManager;
         int            layerIndex{ 0 };
 
-        juce::Label    instrumentLabel{ "InstLabel", "SELECT INSTRUMENT CONTAINER (.BIN)" };
-        juce::ComboBox instrumentDropDown;
-        juce::Label    syncBadgeLabel;
+        juce::Label      instrumentLabel{ "InstLabel", "INSTRUMENT CONTAINER (.BIN / .SFZ)" };
+        juce::ComboBox   instrumentDropDown;
+        juce::TextButton browseButton{ "Browse Instrument..." };
+        juce::Label      syncBadgeLabel;
 
-        juce::Slider   inputGainSlider;
-        juce::Label    inputGainLabel{ "InputGain", "Sample Input Gain" };
+        juce::Slider     inputGainSlider;
+        juce::Label      inputGainLabel{ "InputGain", "Sample Input Gain" };
 
-        AdsrCanvas     adsrCanvas;
-        WaveformViewer waveformViewer;
+        AdsrCanvas       adsrCanvas;
+        WaveformViewer   waveformViewer;
 
         juce::Slider attackSlider;
         juce::Label  attackLabel{ "Att", "Attack" };
@@ -85,10 +80,16 @@ private:
         juce::Slider releaseSlider;
         juce::Label  releaseLabel{ "Rel", "Release" };
 
+        std::unique_ptr<juce::FileChooser> fileChooser;
+        std::vector<juce::File> availableFiles;
+
         EditorComponent(AudioEngine& ae, PresetManager& pm, int layerIndex);
+        ~EditorComponent() override;
         void resized() override;
         void refreshInstrumentList();
         void updateSyncStatus();
+        void loadFileIntoLayer(const juce::File& file);
+        void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
         WaveformViewer& getWaveformViewer() { return waveformViewer; }
     };

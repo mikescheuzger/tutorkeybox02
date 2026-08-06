@@ -23,7 +23,7 @@ MidiConsoleWindow::ConsoleComponent::ConsoleComponent(MidiState& /*state*/) {
     autoScrollToggle.setColour(juce::ToggleButton::textColourId, juce::Colours::lightgrey);
     addAndMakeVisible(autoScrollToggle);
 
-    updateLog("=== TutorKeyBox02 MIDI & Sample Console Log Initialized ===");
+    updateLog("=== TutorKeyBox02 Real-Time MIDI & Sample Inspector Console ===");
 }
 
 void MidiConsoleWindow::ConsoleComponent::resized() {
@@ -40,11 +40,14 @@ void MidiConsoleWindow::ConsoleComponent::resized() {
 
 void MidiConsoleWindow::ConsoleComponent::updateLog(const juce::String& logLine) {
     juce::String timestamp = juce::Time::getCurrentTime().formatted("[%H:%M:%S.%3ms] ");
-    logTextEditor.moveCaretToEnd();
-    logTextEditor.insertTextAtCaret(timestamp + logLine + "\n");
+    bool shouldScroll = autoScrollToggle.getToggleState();
 
-    if (autoScrollToggle.getToggleState()) {
+    if (shouldScroll) {
         logTextEditor.moveCaretToEnd();
+        logTextEditor.insertTextAtCaret(timestamp + logLine + "\n");
+        logTextEditor.setCaretPosition(logTextEditor.getText().length());
+    } else {
+        logTextEditor.setText(logTextEditor.getText() + timestamp + logLine + "\n", false);
     }
 }
 
@@ -56,39 +59,59 @@ void MidiConsoleWindow::ConsoleComponent::clearLog() {
 // =============================================================================
 // MidiConsoleWindow DocumentWindow Implementation
 // =============================================================================
-MidiConsoleWindow::MidiConsoleWindow(MidiState& stateToMonitor)
+MidiConsoleWindow::MidiConsoleWindow(AudioEngine& engineToMonitor)
     : DocumentWindow("TutorKeyBox MIDI & Sample Console",
                      juce::Colour(0xff09090b),
                      DocumentWindow::allButtons),
-      midiState(stateToMonitor) {
+      audioEngine(engineToMonitor) {
 
-    consoleComponent = std::make_unique<ConsoleComponent>(stateToMonitor);
+    consoleComponent = std::make_unique<ConsoleComponent>(engineToMonitor.getMidiState());
     setContentNonOwned(consoleComponent.get(), true);
     setResizable(true, true);
-    setResizeLimits(400, 300, 1000, 800);
-    centreWithSize(600, 450);
+    setResizeLimits(450, 320, 1100, 850);
+    centreWithSize(640, 480);
 
-    midiState.addChangeListener(this);
+    audioEngine.getMidiState().addChangeListener(this);
 }
 
 MidiConsoleWindow::~MidiConsoleWindow() {
-    midiState.removeChangeListener(this);
+    audioEngine.getMidiState().removeChangeListener(this);
 }
 
 void MidiConsoleWindow::closeButtonPressed() {
     setVisible(false);
 }
 
+void MidiConsoleWindow::logMidiMessage(const juce::MidiMessage& msg) {
+    if (consoleComponent == nullptr) return;
+
+    if (msg.isNoteOn()) {
+        int note = msg.getNoteNumber();
+        juce::String noteName = juce::MidiMessage::getMidiNoteName(note, true, true, 4);
+        int vel = juce::roundToInt(msg.getFloatVelocity() * 100.0f);
+        consoleComponent->updateLog("MIDI Note On: " + noteName + " (" + juce::String(note) + ") | Velocity: " + juce::String(vel) + "%");
+    } else if (msg.isNoteOff()) {
+        int note = msg.getNoteNumber();
+        juce::String noteName = juce::MidiMessage::getMidiNoteName(note, true, true, 4);
+        consoleComponent->updateLog("MIDI Note Off: " + noteName + " (" + juce::String(note) + ")");
+    } else if (msg.isController()) {
+        int cc = msg.getControllerNumber();
+        int val = msg.getControllerValue();
+        juce::String ccName = (cc == 64) ? "Sustain Pedal (CC64)" : ("CC " + juce::String(cc));
+        consoleComponent->updateLog("MIDI Controller: " + ccName + " -> Value: " + juce::String(val));
+    }
+}
+
 void MidiConsoleWindow::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
-    juce::String sampleName = midiState.getLastSampleName();
-    int rootNote = midiState.getLastSampleRoot();
-    int keyLow = midiState.getLastSampleKeyLow();
-    int keyHigh = midiState.getLastSampleKeyHigh();
-    int velLow = midiState.getLastSampleVelLow();
-    int velHigh = midiState.getLastSampleVelHigh();
+    juce::String sampleName = audioEngine.getMidiState().getLastSampleName();
+    int rootNote = audioEngine.getMidiState().getLastSampleRoot();
+    int keyLow = audioEngine.getMidiState().getLastSampleKeyLow();
+    int keyHigh = audioEngine.getMidiState().getLastSampleKeyHigh();
+    int velLow = audioEngine.getMidiState().getLastSampleVelLow();
+    int velHigh = audioEngine.getMidiState().getLastSampleVelHigh();
 
     if (sampleName.isNotEmpty()) {
-        juce::String logMsg = "TRIGGERED -> " + sampleName +
+        juce::String logMsg = "SAMPLE TRIGGER -> " + sampleName +
                               " [Root: " + juce::String(rootNote) +
                               " (" + juce::MidiMessage::getMidiNoteName(rootNote, true, true, 4) + ")" +
                               ", KeyZone: " + juce::String(keyLow) + "-" + juce::String(keyHigh) +

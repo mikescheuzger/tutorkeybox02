@@ -123,21 +123,13 @@ void FXChannel::processBlock(juce::AudioBuffer<float>& auxBuffer,
             float inL = auxL[i];
             float inR = auxR[i];
 
-            // Push input sample FIRST into delay line
-            delayLineL.pushSample(0, inL);
-            delayLineR.pushSample(0, inR);
-
-            // Pop delayed sample
+            // Pop current delayed sample from delay line
             float delayedL = delayLineL.popSample(0);
             float delayedR = delayLineR.popSample(0);
 
-            // Add feedback back into delay line
-            if (delayFeedback > 0.001f) {
-                delayLineL.pushSample(0, delayedL * delayFeedback);
-                delayLineR.pushSample(0, delayedR * delayFeedback);
-                delayLineL.popSample(0);
-                delayLineR.popSample(0);
-            }
+            // Push input + feedback sample ONCE per sample tick
+            delayLineL.pushSample(0, inL + (delayedL * delayFeedback));
+            delayLineR.pushSample(0, inR + (delayedR * delayFeedback));
 
             // Write wet delay to temporary buffer
             dOutL[i] = delayedL * delayWetLevel;
