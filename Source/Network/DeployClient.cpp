@@ -1,4 +1,5 @@
 #include "DeployClient.h"
+#include "../Synth/SamplePackager.h"
 
 DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
     DeploymentSnapshot snap;
@@ -8,7 +9,27 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
         if (layer.sampleContainerPath.isNotEmpty()) {
             juce::File f(layer.sampleContainerPath);
             if (f.existsAsFile()) {
-                snap.containers.push_back({ i, f });
+                if (f.getFileExtension().equalsIgnoreCase(".sfz")) {
+                    juce::File binCandidate = f.getParentDirectory().getChildFile(f.getFileNameWithoutExtension() + ".bin");
+                    if (binCandidate.existsAsFile()) {
+                        snap.containers.push_back({ i, binCandidate });
+                    } else {
+                        juce::File samplesDir = f.getParentDirectory().getChildFile("Samples");
+                        if (!samplesDir.isDirectory()) samplesDir = f.getParentDirectory();
+                        
+                        juce::File targetBin = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Containers").getChildFile(f.getFileNameWithoutExtension() + ".bin");
+                        targetBin.getParentDirectory().createDirectory();
+
+                        if (SamplePackager::createPackage(samplesDir, targetBin)) {
+                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ directory to container -> " + targetBin.getFileName());
+                            snap.containers.push_back({ i, targetBin });
+                        } else {
+                            snap.containers.push_back({ i, f });
+                        }
+                    }
+                } else {
+                    snap.containers.push_back({ i, f });
+                }
             }
         }
     }

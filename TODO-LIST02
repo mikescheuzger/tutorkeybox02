@@ -245,6 +245,7 @@
 - [x] Implemented thread-safe `DeploymentSnapshot` architecture in `DeployClient.h/.cpp` to eliminate UI thread data races
 - [x] Added 88-key note range expansion (`keyLow=0, keyHigh=127`) for direct single WAV sample container loading on Pi 5
 - [x] Refactored `DeployServer::handleIncomingClient` in `DeployServer.cpp` to maintain a persistent TCP socket loop across all container chunks and preset payload
+- [x] Implemented automatic on-the-fly `.bin` container packaging in `DeployClient.cpp` for `.sfz` instruments, eliminating manual terminal packaging
 
 ---
 
