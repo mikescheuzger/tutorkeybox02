@@ -104,6 +104,7 @@ target_sources(TutorKeyBoxCore PRIVATE
 
 target_compile_definitions(TutorKeyBoxCore PRIVATE
     JUCE_STANDALONE_APPLICATION=1
+    JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_USE_FLAC=1
     HEADLESS_CORE=1
