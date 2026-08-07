@@ -144,48 +144,44 @@ bool DeployClient::deploySnapshotToHardware(const DeploymentSnapshot& snapshot,
         juce::String binFileName = binFile.getFileName();
         juce::Logger::writeToLog("DeployClient: Streaming " + binFileName + " (" + juce::String(totalBytes / (1024 * 1024)) + " MB) to Pi...");
 
-        // Stream file in 64 KB chunks over TCP
-        constexpr size_t CHUNK_SIZE = 64 * 1024;
-        juce::HeapBlock<char> chunkBuf(CHUNK_SIZE);
+        // Stream file in 4 MB chunks over TCP.
+        // Deployment runs on its own thread with no audio priority constraints,
+        // so we use large chunks and a single coalesced write per chunk for
+        // maximum throughput.
+        constexpr size_t CHUNK_SIZE = 4 * 1024 * 1024;
+        size_t headerTotal = sizeof(NetworkProtocol::DeployHeader) + sizeof(NetworkProtocol::ContainerChunkHeader);
+        juce::HeapBlock<char> sendBuf(headerTotal + CHUNK_SIZE);
         uint64_t offset = 0;
 
         while (!fileStream.isExhausted()) {
-            int numRead = fileStream.read(chunkBuf.getData(), (int)CHUNK_SIZE);
+            char* payloadStart = sendBuf.getData() + headerTotal;
+            int numRead = fileStream.read(payloadStart, (int)CHUNK_SIZE);
             if (numRead <= 0) break;
 
-            NetworkProtocol::DeployHeader outerHdr{};
-            outerHdr.magic[0] = 'T'; outerHdr.magic[1] = 'K';
-            outerHdr.magic[2] = 'B'; outerHdr.magic[3] = 'D';
-            outerHdr.opCode = (uint8_t)NetworkProtocol::DeployOpCode::ContainerChunk;
-            outerHdr.payloadSize = (uint32_t)(sizeof(NetworkProtocol::ContainerChunkHeader) + numRead);
+            // Build outer deploy header directly into the send buffer
+            auto* outerHdr = reinterpret_cast<NetworkProtocol::DeployHeader*>(sendBuf.getData());
+            outerHdr->magic[0] = 'T'; outerHdr->magic[1] = 'K';
+            outerHdr->magic[2] = 'B'; outerHdr->magic[3] = 'D';
+            outerHdr->opCode = (uint8_t)NetworkProtocol::DeployOpCode::ContainerChunk;
+            outerHdr->payloadSize = (uint32_t)(sizeof(NetworkProtocol::ContainerChunkHeader) + numRead);
 
-            if (socket.write(&outerHdr, sizeof(outerHdr)) != sizeof(outerHdr)) {
-                juce::Logger::writeToLog("DeployClient Error: Failed to write outer deploy header!");
-                updateProgress(0.0f, "Error: Container streaming failed!");
-                return false;
-            }
+            // Build chunk header directly after the outer header in the same buffer
+            auto* chunkHdr = reinterpret_cast<NetworkProtocol::ContainerChunkHeader*>(
+                sendBuf.getData() + sizeof(NetworkProtocol::DeployHeader));
+            chunkHdr->magic[0] = 'T'; chunkHdr->magic[1] = 'K';
+            chunkHdr->magic[2] = 'B'; chunkHdr->magic[3] = 'D';
+            chunkHdr->opCode = (uint8_t)NetworkProtocol::DeployOpCode::ContainerChunk;
+            chunkHdr->layerIndex = (uint8_t)item.layerIndex;
+            binFileName.copyToUTF8(chunkHdr->containerFileName, sizeof(chunkHdr->containerFileName) - 1);
+            chunkHdr->chunkOffset = offset;
+            chunkHdr->chunkSize = (uint32_t)numRead;
+            chunkHdr->totalFileSize = (uint64_t)totalBytes;
+            chunkHdr->isLastChunk = fileStream.isExhausted() ? 1 : 0;
 
-            NetworkProtocol::ContainerChunkHeader chunkHdr{};
-            chunkHdr.magic[0] = 'T'; chunkHdr.magic[1] = 'K';
-            chunkHdr.magic[2] = 'B'; chunkHdr.magic[3] = 'D';
-            chunkHdr.opCode = (uint8_t)NetworkProtocol::DeployOpCode::ContainerChunk;
-            chunkHdr.layerIndex = (uint8_t)item.layerIndex;
-            binFileName.copyToUTF8(chunkHdr.containerFileName, sizeof(chunkHdr.containerFileName) - 1);
-            chunkHdr.chunkOffset = offset;
-            chunkHdr.chunkSize = (uint32_t)numRead;
-            chunkHdr.totalFileSize = (uint64_t)totalBytes;
-            chunkHdr.isLastChunk = fileStream.isExhausted() ? 1 : 0;
-
-            // Send chunk header
-            if (socket.write(&chunkHdr, sizeof(chunkHdr)) != sizeof(chunkHdr)) {
-                juce::Logger::writeToLog("DeployClient Error: Failed to write chunk header!");
-                updateProgress(0.0f, "Error: Container streaming failed!");
-                return false;
-            }
-
-            // Send chunk payload
-            if (socket.write(chunkBuf.getData(), numRead) != numRead) {
-                juce::Logger::writeToLog("DeployClient Error: Failed to write chunk payload!");
+            // Single write: both headers + payload in one call
+            int totalWrite = (int)(headerTotal + numRead);
+            if (socket.write(sendBuf.getData(), totalWrite) != totalWrite) {
+                juce::Logger::writeToLog("DeployClient Error: Failed to write chunk to socket!");
                 updateProgress(0.0f, "Error: Container streaming failed!");
                 return false;
             }
