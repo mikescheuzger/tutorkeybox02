@@ -253,6 +253,7 @@
 - [x] Added automatic `.bin` candidate redirection in `SampleContainerReader.cpp` on Pi 5 for legacy `.sfz` preset references
 - [x] Implemented fail-safe SFZ to `.bin` container normalization in `DeployClient::createSnapshot` so `.sfz` paths in memory are auto-converted to `.bin` prior to streaming
 - [x] Added Mac local path resolution in `DeployClient.cpp` to map Linux paths (`/home/kbox/...`) back to Mac disk files for automatic `.bin` packaging
+- [x] Updated `DeployClient.cpp` to pass the `Samples` directory directly to `SamplePackager::createPackage` to bundle all 641 FLAC files into `.bin`
 
 ---
 

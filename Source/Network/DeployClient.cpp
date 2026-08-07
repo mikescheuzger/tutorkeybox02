@@ -32,8 +32,11 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
                                                 .getChildFile(f.getFileNameWithoutExtension() + ".bin");
                         targetBin.getParentDirectory().createDirectory();
 
-                        if (SamplePackager::createPackage(f, targetBin)) {
-                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ to container -> " + targetBin.getFileName());
+                        juce::File packInput = f.getParentDirectory().getChildFile("Samples");
+                        if (!packInput.isDirectory()) packInput = f;
+
+                        if (SamplePackager::createPackage(packInput, targetBin)) {
+                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ directory to container -> " + targetBin.getFileName());
                             f = targetBin;
                         }
                     }
