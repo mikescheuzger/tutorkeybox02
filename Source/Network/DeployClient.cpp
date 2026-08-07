@@ -10,6 +10,23 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
         if (layer.sampleContainerPath.isNotEmpty()) {
             juce::File f(layer.sampleContainerPath);
             if (f.existsAsFile()) {
+                if (f.getFileExtension().equalsIgnoreCase(".sfz")) {
+                    juce::File binCandidate = f.getParentDirectory().getChildFile(f.getFileNameWithoutExtension() + ".bin");
+                    if (binCandidate.existsAsFile()) {
+                        f = binCandidate;
+                    } else {
+                        juce::File targetBin = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                                .getChildFile("Containers")
+                                                .getChildFile(f.getFileNameWithoutExtension() + ".bin");
+                        targetBin.getParentDirectory().createDirectory();
+
+                        if (SamplePackager::createPackage(f, targetBin)) {
+                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ to container -> " + targetBin.getFileName());
+                            f = targetBin;
+                        }
+                    }
+                }
+
                 snap.containers.push_back({ i, f });
                 if (auto* layersArray = jsonVar["layers"].getArray()) {
                     if (i < layersArray->size()) {

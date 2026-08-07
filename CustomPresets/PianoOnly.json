@@ -49,13 +49,13 @@
       "muted": false,
       "sampleInputGain": 1.0,
       "auxSendGain": 0.0,
-      "filterCutoffHz": 433.0,
+      "filterCutoffHz": 20000.0,
       "filterResonanceQ": 0.699999988079071,
       "attackMs": 10.0,
       "decayMs": 100.0,
       "sustainLevel": 1.0,
       "releaseMs": 300.0,
-      "containerPath": "/Users/mikescheuzger/Desktop/TutorKeyBox02/Samples/TestPad/DemoPad_C3.wav"
+      "containerPath": ""
     },
     {
       "volume": 1.0,
