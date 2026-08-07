@@ -9,21 +9,32 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
         const auto& layer = preset.getLayerPreset(i);
         if (layer.sampleContainerPath.isNotEmpty()) {
             juce::File f(layer.sampleContainerPath);
+            juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Raw path: " + layer.sampleContainerPath);
+            juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] existsAsFile: " + juce::String(f.existsAsFile() ? "YES" : "NO"));
+
             if (!f.existsAsFile()) {
                 juce::File macBase = juce::File::getCurrentWorkingDirectory().getChildFile("Samples");
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] CWD: " + juce::File::getCurrentWorkingDirectory().getFullPathName());
                 if (!macBase.isDirectory()) macBase = juce::File("/Users/mikescheuzger/Desktop/TutorKeyBox02/Samples");
-                
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] macBase: " + macBase.getFullPathName() + " exists: " + juce::String(macBase.isDirectory() ? "YES" : "NO"));
+
                 juce::File found = macBase.getChildFile(f.getFileName());
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Attempt 1: " + found.getFullPathName() + " -> " + juce::String(found.existsAsFile() ? "FOUND" : "miss"));
                 if (!found.existsAsFile()) found = macBase.getChildFile("SalamanderGrandPiano-master").getChildFile(f.getFileName());
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Attempt 2: " + found.getFullPathName() + " -> " + juce::String(found.existsAsFile() ? "FOUND" : "miss"));
                 if (!found.existsAsFile()) found = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Containers").getChildFile(f.getFileName());
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Attempt 3: " + found.getFullPathName() + " -> " + juce::String(found.existsAsFile() ? "FOUND" : "miss"));
                 if (!found.existsAsFile()) found = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Containers").getChildFile(f.getFileNameWithoutExtension() + ".bin");
-                
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Attempt 4: " + found.getFullPathName() + " -> " + juce::String(found.existsAsFile() ? "FOUND" : "miss"));
+
                 if (found.existsAsFile()) f = found;
             }
 
             if (f.existsAsFile()) {
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Resolved to: " + f.getFullPathName());
                 if (f.getFileExtension().equalsIgnoreCase(".sfz")) {
                     juce::File binCandidate = f.getParentDirectory().getChildFile(f.getFileNameWithoutExtension() + ".bin");
+                    juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] .sfz detected. binCandidate: " + binCandidate.getFullPathName() + " exists: " + juce::String(binCandidate.existsAsFile() ? "YES" : "NO"));
                     if (binCandidate.existsAsFile()) {
                         f = binCandidate;
                     } else {
@@ -33,21 +44,29 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
                         targetBin.getParentDirectory().createDirectory();
 
                         juce::File packInput = f.getParentDirectory().getChildFile("Samples");
+                        juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] packInput: " + packInput.getFullPathName() + " isDir: " + juce::String(packInput.isDirectory() ? "YES" : "NO"));
                         if (!packInput.isDirectory()) packInput = f;
+                        juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] targetBin: " + targetBin.getFullPathName());
+                        juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Calling SamplePackager::createPackage...");
 
                         if (SamplePackager::createPackage(packInput, targetBin)) {
-                            juce::Logger::writeToLog("DeployClient: Auto-packaged SFZ directory to container -> " + targetBin.getFileName());
+                            juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] createPackage SUCCESS -> " + targetBin.getFileName());
                             f = targetBin;
+                        } else {
+                            juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] createPackage FAILED. Falling back to raw .sfz.");
                         }
                     }
                 }
 
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] Final file to stream: " + f.getFullPathName());
                 snap.containers.push_back({ i, f });
                 if (auto* layersArray = jsonVar["layers"].getArray()) {
                     if (i < layersArray->size()) {
                         (*layersArray)[i].getDynamicObject()->setProperty("sampleContainerPath", f.getFileName());
                     }
                 }
+            } else {
+                juce::Logger::writeToLog("DeployClient [L" + juce::String(i+1) + "] ERROR: Could not resolve file on Mac disk. Layer skipped.");
             }
         }
     }
@@ -76,22 +95,38 @@ bool DeployClient::deploySnapshotToHardware(const DeploymentSnapshot& snapshot,
         }
     };
 
-    updateProgress(0.05f, "Connecting to " + targetHost + "...");
+    updateProgress(0.05f, "Connecting to KeyBox...");
 
-    // 1. Try primary targetHost (e.g. "kbox.local") with 1500 ms timeout
-    bool connected = socket.connect(targetHost, targetPort, 1500);
+    // 1. Try USB Ethernet gadget first (10.55.0.1) - USB 3.0 speed when Pi connected via USB-C
+    bool connected = false;
+    juce::String activeHost = targetHost;
 
-    // 2. Fallback to 127.0.0.1 (localhost) if kbox.local is unreachable
-    if (!connected && targetHost != "127.0.0.1" && targetHost != "localhost") {
-        juce::Logger::writeToLog("DeployClient: " + targetHost + " unreachable. Falling back to 127.0.0.1...");
-        connected = socket.connect("127.0.0.1", targetPort, 1000);
+    {
+        juce::StreamingSocket usbProbe;
+        if (usbProbe.connect("10.55.0.1", targetPort, 300)) {
+            juce::Logger::writeToLog("DeployClient: USB Ethernet detected at 10.55.0.1. Using USB path.");
+            updateProgress(0.06f, "USB connected - deploying at full USB speed...");
+            activeHost = "10.55.0.1";
+        }
+    }
+
+    // 2. Connect on the chosen host (USB or Wi-Fi)
+    connected = socket.connect(activeHost, targetPort, 2000);
+
+    // 3. Fallback to Wi-Fi hostname if USB and primary failed
+    if (!connected && activeHost != targetHost) {
+        juce::Logger::writeToLog("DeployClient: USB path failed. Falling back to " + targetHost + "...");
+        activeHost = targetHost;
+        connected = socket.connect(activeHost, targetPort, 1500);
     }
 
     if (!connected) {
-        juce::Logger::writeToLog("DeployClient Error: Could not connect to " + targetHost + " on port " + juce::String(targetPort));
+        juce::Logger::writeToLog("DeployClient Error: Could not connect to KeyBox on any path.");
         updateProgress(0.0f, "Error: Connection failed!");
         return false;
     }
+
+    juce::Logger::writeToLog("DeployClient: Connected via " + activeHost);
 
     updateProgress(0.10f, "Checking sample containers on KeyBox...");
 
