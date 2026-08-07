@@ -1,0 +1,14 @@
+[Unit]
+Description=TutorKeyBox Daemon
+After=sound.target
+
+[Service]
+Type=simple
+User=kbox
+WorkingDirectory=/home/kbox/TutorKeyBox02
+ExecStart=/home/kbox/TutorKeyBox02/build/TutorKeyBoxCore_artefacts/Release/TutorKeyBoxCore
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
