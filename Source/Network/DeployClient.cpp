@@ -9,6 +9,18 @@ DeploymentSnapshot DeployClient::createSnapshot(const PresetManager& preset) {
         const auto& layer = preset.getLayerPreset(i);
         if (layer.sampleContainerPath.isNotEmpty()) {
             juce::File f(layer.sampleContainerPath);
+            if (!f.existsAsFile()) {
+                juce::File macBase = juce::File::getCurrentWorkingDirectory().getChildFile("Samples");
+                if (!macBase.isDirectory()) macBase = juce::File("/Users/mikescheuzger/Desktop/TutorKeyBox02/Samples");
+                
+                juce::File found = macBase.getChildFile(f.getFileName());
+                if (!found.existsAsFile()) found = macBase.getChildFile("SalamanderGrandPiano-master").getChildFile(f.getFileName());
+                if (!found.existsAsFile()) found = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Containers").getChildFile(f.getFileName());
+                if (!found.existsAsFile()) found = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Containers").getChildFile(f.getFileNameWithoutExtension() + ".bin");
+                
+                if (found.existsAsFile()) f = found;
+            }
+
             if (f.existsAsFile()) {
                 if (f.getFileExtension().equalsIgnoreCase(".sfz")) {
                     juce::File binCandidate = f.getParentDirectory().getChildFile(f.getFileNameWithoutExtension() + ".bin");
