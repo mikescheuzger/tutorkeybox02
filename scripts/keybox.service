@@ -1,14 +1,17 @@
 [Unit]
 Description=TutorKeyBox Daemon
-After=sound.target
+After=sound.target alsa-restore.service multi-user.target
+Wants=alsa-restore.service
 
 [Service]
 Type=simple
 User=kbox
 WorkingDirectory=/home/kbox/TutorKeyBox02
+# Wait 5 seconds for USB audio interface to enumerate before starting
+ExecStartPre=/bin/sleep 5
 ExecStart=/home/kbox/TutorKeyBox02/build/TutorKeyBoxCore_artefacts/Release/TutorKeyBoxCore
 Restart=on-failure
-RestartSec=3
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
